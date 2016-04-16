@@ -1,0 +1,8 @@
+all: compile write_info read_info
+
+compile: hello.c
+	gcc -o hello.o hello.c
+write_info: compile
+	objcopy --add-section .version=version_info \
+		--set-section-flags .mydata=noload,readonly \
+		hello.o hello_w_ver.o
