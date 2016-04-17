@@ -1,0 +1,85 @@
+set csprg=/usr/bin/cscope
+set csto=0
+set cst
+set nocsverb
+set bg=dark
+set autoindent
+set smartindent
+set hlsearch
+
+if filereadable("./cscope.out")
+	cs add cscope.out
+else 
+	cs add /home/iamyooon/work/000-kernel/mainline_k/cscope.out
+"	cs add /home/iamyooon/work/100.android/platform/TCC8930/01.SourceCode/kernel/cscope.out
+endif
+set csverb
+
+
+if filereadable("./tags")
+	set tag=./tags
+else 
+	set tag=/home/iamyooon/work/000-kernel/mainline_k/tags
+"	set tag=/home/iamyooon/work/100.android/platform/TCC8930/01.SourceCode/kernel/tags
+endif
+
+ "find this C symbol
+func! Css()
+ let css = expand("<cword>")
+ new
+ exe "cs find s ".css
+ if getline(1) == " "
+ exe "q!"
+ endif
+endfunc
+nmap ,css :call Css()<cr>
+
+
+ "find finctions calling this function
+func! Csc()
+ let csc = expand("<cword>")
+ new
+ exe "cs find c ".csc
+ if getline(1) == " "
+  exe "q!"
+ endif
+endfunc
+nmap ,csc :call Csc()<cr>
+
+
+ "find functions called by this function
+func! Csd()
+ let csd = expand("<cword>")
+ new
+ exe "cs find d ".csd
+ if getline(1) == " "
+  exe "q!"
+ endif
+endfunc
+nmap ,csd :call Csd()<cr>
+
+
+ "find this definition
+func! Csg()
+ let csg = expand("<cword>")
+ new
+ exe "cs find g ".csg
+ if getline(1) == " "
+  exe "q!"
+ endif
+endfunc
+nmap ,csg :call Csg()<cr>
+
+"=============== key mapping ======================
+map <F2> v]}zf
+map <F3> zo
+map <F4> :Tlist<cr><C-W><C-W>
+map <F5> :buffers<cr>
+
+map <PageUp> <C-U><C-U>
+map <PageDown> <C-D><C-D>
+
+map <c-h> <c-w>h
+map <c-j> <c-w>j
+map <c-k> <c-w>k
+map <c-l> <c-w>l
