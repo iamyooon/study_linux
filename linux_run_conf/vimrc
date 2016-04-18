@@ -1,3 +1,74 @@
+set nu
+set ai
+set ts=8
+set bg=dark
+"코드보는 눈이 좀더 편해짐.
+:set t_Co=256
+
+"들여쓰기 설정
+set smartindent
+"줄번호 설정
+set number
+"언어별 키워드 하이라이팅 기능
+syntax on
+"편집창의 배경을 어둡게 설정한다 이에 맞게 텍스트들의 색도 바뀌 것이다
+set background=dark
+set csprg=/usr/bin/cscope
+set csto=0
+set cst
+set nocsverb
+if filereadable("./cscope.out")
+        cs add cscope.out
+endif
+set csverb
+
+filetype on
+nmap <F7> :TlistToggle<CR>
+let Tlist_Ctags_Cmd = "/usr/bin/ctags"
+let Tlist_Inc_Winwidth = 0
+let Tlist_Exit_OnlyWindow = 0
+let Tlist_Auto_Open = 0
+let Tlist_Use_Right_Window = 1
+
+
+"=============== NERDTree =============="
+let NERDTreeWinPos = "left"
+nmap <F9> :NERDTreeToggle<CR>
+
+"=============== source explorer =============="
+nmap <F8> :SrcExplToggle<CR>
+nmap <C-H> <C-W>h
+nmap <C-J> <C-W>j
+nmap <C-K> <C-W>k
+nmap <C-L> <C-W>l
+
+let g:SrcExpl_winHeight = 8
+let g:SrcExpl_refreshTime = 100
+let g:SrcExpl_jumpKey = "<ENTER>"
+let g:SrcExpl_gobackKey = "<SPACE>"
+
+"일치하는 태그가 존재하는 다음 파일로 이동하기
+map <F3> :tnext^M
+"이전 파일로 이동하기
+map <F2> :tprevious^M
+"변경사항 저장하기
+map <F4> :w^M
+
+"붙여넣기모드 활성화
+map <C-P>y :set paste^M
+map <C-P>n :set nopaste^M
+
+"라인번호 활성화
+map <C-N>y :set nu^M
+map <C-N>n :set nonu^M
+
+"라인 첫글자 +,- 지우기
+map <C-D>+ :%s/^+//g^M
+map <C-D>- :%s/^-//g^M
+
+map <C-I>i :r! echo "Commented by SeokHoon.Yoon(sh.yoon@lge.com)"^M
+
+
 set csprg=/usr/bin/cscope
 set csto=0
 set cst
@@ -70,6 +141,11 @@ func! Csg()
 endfunc
 nmap ,csg :call Csg()<cr>
 
+hi ExtraWhitespace ctermbg=red guibg=red
+match ExtraWhitespace /\s\+$\| \+\ze\t/
+
+" 검색한 문자 하이라이팅
+set hlsearch
 "=============== key mapping ======================
 map <F2> v]}zf
 map <F3> zo
