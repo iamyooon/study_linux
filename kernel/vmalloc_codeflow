@@ -34,17 +34,21 @@ alloc_vm_area()--|
 ----------------------------
 mapping to page-table codeflow
 ---------------------------
-                  get_vm_area_caller()                                  
-                            |                                        
-vmap() ---------------------|-------------\  
-__vmalloc_area_node() ---------------------> map_vm_area() ------\
-                            |                                    \\
+map_kernel_range_noflush()  --------------------------------------------------------------------|
+                                                                                                |
+alloc_vm_area() ------------|--------------------|                                              |
+                            |          apply_to_page_range()                                    |
+                            |                                                                   |
+vmap() ---------------------|-------------|                                                     |
+                            |             |                                                     |
+                get_vm_area_caller()      |                                                     |
+                                          \                                                     |
+__vmalloc_area_node() ---------------------> map_vm_area() ------\                              |
+                            |                                    \\                             |
 alloc_vm_area()-------------|----------|                           -->  vmap_page_range() ------|
-                                  apply_to_page_range()          //                  vmap_page_range_noflush()
-                                                                 /                   flush_cache_vmap()
-vm_map_ram() ----|--------------|--------------------------------|                             |
-             vb_alloc()         |                                                              |
-	                 alloc_vmap_area()                                                     |
-                                                                                               |
-map_kernel_range_noflush-----------------------------------------------------------------------|
+                                  apply_to_page_range()          //                             |
+                                                                 /                   vmap_page_range_noflush()
+vm_map_ram() ----|--------------|--------------------------------|                   flush_cache_vmap()
+             vb_alloc()         | 
+	                 alloc_vmap_area()
 
