@@ -1,0 +1,25 @@
+schedule() ----------------------------------------------------------------\
+preempt_schedule() --------------------\                                    \
+                                        \                                    \
+cond_resched() --|                       \                                    \
+                 |                        \                                    \
+            _cond_resched() ---------------\                                    \
+                                            \                                    \
+cond_resched_lock() --|                       --> preempt_schedule_common() ---------> __schedule()
+                      |                     /                                    /
+          __cond_resched_lock() -----------/                                    /
+                                          /                                    /
+cond_resched_softirq() --|               /                                    /
+                         |              /                                    /
+            __cond_resched_softirq() --/                                    /
+                                                                           /
+preempt_enable_notrace() --|                                              /
+                           |                                             /
+        __preempt_schedule_notrace() --|                                /
+                                       |                               /
+                          preempt_schedule_notrace() -----------------/
+__irq_svc --|                                                        /
+            |                                                       /
+       svc_preempt --|                                             /
+                     |                                            /
+           preempt_schedule_irq() -------------------------------/
