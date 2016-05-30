@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-fstack-protector -Wall
+CFLAGS=-fstack-protector-strong -Wall -g
 SAMPLE=ssp
 
 all:  $(SAMPLE)
