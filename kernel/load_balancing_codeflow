@@ -1,0 +1,29 @@
+scheduler_tick()
+     |
+     -----> trigger_load_balance() -> check next lb time is arrived ??? -> raise SCHED_SOFTIRQ -> call run_rebalance_domains()
+
+run_rebalance_domains()
+     |
+     -----> rebalance_domains()
+                    |
+		    |                -------------------------------------------------------------------------------------------------------------------------------
+		    |                |                                                    |                                                                        |
+		    |                V                     NO                             |                                                                        |
+		    -----> SD = SD->parent -> SD is NULL? ----                            |                                                                        |
+						|	     |                            | NO                                                                     |
+						|	     -----> SD support lb???  -----                                                                        |
+					     YES|			  |                                                                                        |
+						|		      YES |                                   YES                                                  |
+						|			  |---> expired lb interval for SD ?? ---> call load_balance() -> update sd->last_balance --
+				    update rq->next_balance
+
+load_balance()
+     |
+     -----> find_busiest_group() -> find_busiest_queue() -> busiest CPU->nr_running > 1
+                                                                       |
+								       | YES
+								       |
+								       ---> detach_tasks() -> moved task > 0 ?? ---> attach_tasks()
+								                                   |
+												   |
+

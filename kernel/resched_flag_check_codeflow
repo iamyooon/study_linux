@@ -1,0 +1,32 @@
+el0_irq -> irq handling     -> goto ret_to_user
+el0_svc -> call system call -> goto ret_fast_syscall
+
+			ret_fast_syscall-----
+					    |
+					    V                                                         NO
+			ret_to_user -> disable irq -> TIF_{NEED_RESCHED, SIGPENDING} ??? ----------------------------> kernel_exit 0
+							 |
+							 | YES
+							 |
+							 V                               NO
+						   work_pending -> TIF_NEED_RESCHED ??? ---> enable irq -> goto ret_to_user
+									   |
+									   | YES
+									   |
+									   V
+								     work_resched -> call schedule() -> goto ret_to_user
+
+
+                                                 YES
+el1_irq -> irq handling -> TIF_NEED_RESCHED ??? -----
+                                    |               |
+                                    |               |
+				    | NO            |
+				    V               |
+			      kernel_exit 1         |
+						    |                   -----------------------------
+					            |			|			    |
+						    |			|                           | YES
+						    V			v                           |               NO
+						el1_preempt -> call preempt_schedule_irq() -> TIF_NEED_RESCHED ??? ---> kernel_exit 1
+
