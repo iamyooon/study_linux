@@ -1,12 +1,16 @@
 #!/bin/bash
 
-#array=( one two three )
-array=(
+array1=( one two three )
+array2=(
 hello
 bye
 good
 )
 
-for i in "${array[@]}"; do
+for i in "${array1[@]}"; do
+	echo $i
+done
+
+for i in "${array2[@]}"; do
 	echo $i
 done
