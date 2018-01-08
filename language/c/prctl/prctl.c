@@ -21,7 +21,7 @@ void print_comm_using_prctl(void)
 	ret = prctl(PR_GET_NAME, pr_name, NULL, NULL, NULL);
 	if (ret != 0){
 		printf("%s : prctr() failed, ret=%d\n", __func__, ret);
-		return ret;
+		return ;
 	}
 	printf("%s : process name is %s\n", __func__, pr_name);
 }
