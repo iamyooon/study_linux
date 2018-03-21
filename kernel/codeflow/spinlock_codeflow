@@ -1,0 +1,83 @@
+*****************************************
+* spinlock related header file relation *
+*****************************************
+
+                   <include/linux/spinlock.h>
+                              /  \
+                             /    \
+	                    /      \
+                           /        \
+                     include        include
+          spinlock_api_smp.h        spinlock_api_up.h
+
+  (CONFIG_SMP ||                    (!CONFIG_SMP &&
+	CONFIG_DEBUG_SPINLOCK)             !CONFIG_DEBUG_SPINLOCK)
+
+
+**********************************************************************
+#        ####    ####   #    #          ######  #        ####   #    #
+#       #    #  #    #  #   #           #       #       #    #  #    #
+#       #    #  #       ####            #####   #       #    #  #    #
+#       #    #  #       #  #            #       #       #    #  # ## #
+#       #    #  #    #  #   #           #       #       #    #  ##  ##
+######   ####    ####   #    #          #       ######   ####   #    #
+**********************************************************************
+
+				  spin_lock_irqsave(lock, flags)
+					      /  \
+					     /    \
+					    /      \
+		 CONFIG_SMP ||             /        \ !CONFIG_SMP &&
+		 CONFIG_DEBUG_SPINLCOK    /          \!CONFIG_DEBUG_SPINLOCK
+		raw_spin_lock_irqsave(lock)         raw_spin_lock_irqsave(lock, flags)
+		->type check for *flags*                           |
+		->_raw_spin_lock_irqsave()                 __LCOK_IRQSAVE(lock, flags)
+                             |                             -> local_irq_save(flags)
+			     |!CONFIG_GENERIC_LOCKBREAK || -> __LOCK(lock)
+                             | CONFIG_DEBUG_LOCK_ALLOC             |
+              __raw_spin_lock_irqsave(lock)                   -> preempt_disable()
+		    -> local_irq_save()                       -> ___LOCK(lock)
+		    -> preempt_disable()                             |
+		    -> spin_acquire()->                         __acuire(lock)
+		    -> do_raw_spin_lock_flags()
+			     |
+		     do_raw_spin_lock()
+			    /  \
+			   /    \
+			  /      \
+ CONFIG_DEBUG_SPINLOCK   /        \ !CONFIG_DEBUG_SPINLOCK
+ -> debug_spin_lock_before()        -> __acquire()
+ -> arch_spin_lock()                -> arch_spin_lock_flags()
+ -> debug_spin_lock_after()                     |
+					 arch_spin_lock()
+
+***********************************************************************************
+ #    #  #    #  #        ####    ####   #    #          ######  #        ####
+ #    #  ##   #  #       #    #  #    #  #   #           #       #       #    #
+ #    #  # #  #  #       #    #  #       ####            #####   #       #    #
+ #    #  #  # #  #       #    #  #       #  #            #       #       #    #
+ #    #  #   ##  #       #    #  #    #  #   #           #       #       #    #
+  ####   #    #  ######   ####    ####   #    #          #       ######   ####
+***********************************************************************************
+
+                 spin_unlock(lock)
+                         |
+              raw_spin_unlock(lock->rlock)
+                         |
+              _raw_spin_unlock(lock)
+                         |
+                         -------------------
+                                          /  \
+                                         /    \
+                                        /      \
+              (CONFIG_SMP ||           /        \ (!CONFIG_SMP &&
+               CONFIG_DEBUG_SPINLOCK) /          \ !CONFIG_DEBUG_SPINLOCK)
+                __raw_spin_unlock(lock)           __UNLOCK(lock)
+                -> spin_release()                 -> preempt_enable() -------------> ___UNLOCK()
+                -> do_raw_spin_unlock() -> preempt_enable()                          -> __release()
+			  /  \
+			 /    \
+			/      \
+CONFIG_DEBUG_SPINLOCK  /        \ !CONFIG_DEBUG_SPINLOCK
+-> __release()                    -> arch_spin_unlock()
+                                  -> __release(lock)

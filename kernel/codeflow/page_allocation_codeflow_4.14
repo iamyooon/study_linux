@@ -1,0 +1,24 @@
+pagecache_get_page() __get_free_page() {slab,kmalloc,percpu} allocator alloc_hugepage_vma() alloc_pages_vma()
+
+						alloc_pages()				percpu,slub,vmalloc
+
+								alloc_pages_node()
+
+								__alloc_pages_node()
+
+								__alloc_pages()
+
+								__alloc_pages_nodemask()	__alloc_pages_
+												{cpuset_fallback,
+												 may_oom,
+												 direct_compact,
+												 slowpath,
+												 nodemask}
+
+										get_page_from_freelist()
+
+										rmqueue()
+
+										rmqueue_pcplist()	__rmqueue_smallest()	__rmqueue()
+
+										pcp allocator		page allocator

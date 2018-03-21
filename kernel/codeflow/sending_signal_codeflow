@@ -1,0 +1,37 @@
+                        release_task()
+                        reparent_leader()       do_notify_parent()
+                        wait_task_zombie()         |
+exit_notify()---------------------------------------
+|
+|                       ptrace_stop()
+|                       get_signal()            do_notify_parent_cldstop()    __group_send_sig_info()
+|                       exit_signals()
+|
+|                                               tty_signal_session_leader()
+|                                               check_thread_timers()
+|                                               check_cpu_itimer()
+|                                               check_process_timers()
+|
+|                       arm64_notify_die()
+|                       __do_user_fault()
+|                       force_sig()             force_sig_info()
+|                       kill_proc()
+|                                                                              specific_send_sig_info()    send_signal()          __send_signal()
+|                        			ptrace_signal()
+|
+|-----------------------forget_original_p
+                        arent()
+
+kill_pgrp()
+kill_orphaned_pgrp()    __kill_pgrp_info()      group_send_sig_info()
+                               |                         |
+kill_something_info()-------------------------------------
+                            |
+it_real_fn()                |
+__do_notify()           kill_pid_info()
+kill_proc_info()
+kill_pid()
+
+                                                send_sig_info()               do_send_sig_info()
+                                                do_send_specific()
+                                                oom_kill_process()

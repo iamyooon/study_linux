@@ -1,0 +1,22 @@
+
+
+     do_mmap()
+        |
+-------------------
+|get unmapped area|
+-------------------
+        |
+       ___
+      /   \    no
+     /file?\--------
+     \     /
+      \___/
+        |
+        | yes
+        |
+-------------------
+|1)use MAP_SHARED as mapping flag,
+| vm_flags |= VM_SHARED | VM_MAYSHARED
+|2) use MAP_PRIVATE as mapping flag,
+|  
+-------------------

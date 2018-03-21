@@ -1,0 +1,11 @@
+driver		slab allocator
+
+	free_pages()
+
+	__free_pages()
+
+free_hot_cold_page()	__free_pages_ok()
+
+			free_one_page()
+
+			__free_one_page()

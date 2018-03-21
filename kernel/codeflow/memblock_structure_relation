@@ -1,0 +1,20 @@
+
+       (global)
+   struct memblock
+            memblock                         struct memblock_type
+--------------------                    --------------------------------                  struct memblock_region
+| .memory ---------|------------------- | .cnt                         |                    memblock_memory_init_regions[0] ~ [127]
+| .reserved -------|----------          | .max                         |                 --------------------------------
+| .bottom_up       |         |          | .regions --------------------|------------->>> | .base                        |
+| .current_limit   |         |          | .total_size                  |                 | .size                        | .....
+--------------------         |          --------------------------------                 | .flags                       |
+                             |                                                           --------------------------------
+                             |
+                             |              struct memblock_type
+                             |          --------------------------------                  struct memblock_region
+                             |--------- | .cnt                         |                   memblock_reserved_init_regions[0] ~ [127]
+			                | .max                         |                 --------------------------------
+			                | .regions --------------------|------------->>> | .base                        |
+			                | .total_size                  |                 | .size                        | .....
+					--------------------------------                 | .flags                       |
+					                                                 --------------------------------

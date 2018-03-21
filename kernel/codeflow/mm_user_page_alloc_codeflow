@@ -1,0 +1,47 @@
+Data abort occured
+
+el1_da   el0_da    el0_ia
+
+do_mem_abort()
+
+do_translation
+        _fault
+
+do_page_fault     __do_page_fault     handle_mm_fault()     __handle_mm_fault()     handle_pte_fault()
+
+                                                                          do_anonymous_page()                 do_fault()
+									  - alloc page
+								          - inc mm_counter(MM_ANONPAGES)      do_read_fault() ------------------------------------
+                                                                                                                    |                                            |
+									  page_add_new_anon_rmap()            __do_fault()             or                do_fault_around()
+									  - inc counterO(NR_ANON_MAPPED)
+                                                                                                              filemap_fault()                            filemap_map_pages() 
+													      (vma->vm_ops->fault())                  (vma->vm_ops->map_pages())
+
+													      page_cache_read()                          alloc_set_pte()
+
+													      add_to_page_cache_lru()                    page_add_file_rmap()
+													      1) __add_to_page_cache_locked()            - inc 
+													        - inc counter(NR_FILE_PAGES)
+													      2) lru_cache_add()
+
+													      __lru_cache_add()
+
+													      __pagevec_lru_add()
+
+													      pagevec_lru_move_fn()
+
+													      __pagevec_lru_add_fn()
+
+													      add_page_to_lru_list()
+
+													      update_lru_size()
+
+													      __update_lru_size()
+													      - inc node counter(NR_ACIVE_FILE)
+													      - inc zone counter(NR_ACIVE_ANON)
+													      or
+													      - inc node counter(NR_INACIVE_FILE)
+													      - inc zone counter(NR_INACIVE_ANON)
+
+

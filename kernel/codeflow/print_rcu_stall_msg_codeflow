@@ -1,0 +1,9 @@
+timer interrupt occured
+-> update_process_times()
+-> rcu_check_callbacks()
+-> rcu_pending()
+-> __rcu_pending()
+-> check_cpu_stall()
+-> print_other_cpu_stall()
+-> rcu_print_task_stall()
+->-> print all task of blkd_tasks field
