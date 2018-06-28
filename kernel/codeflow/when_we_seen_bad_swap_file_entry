@@ -1,0 +1,83 @@
+          pr_err("swap_dup: Bad swap file entry")
+                            ^
+                            |
+                     __swap_duplicate()
+		            ^
+                            |
+swap_shmem_alloc()   swap_duplicate()    swapcache_prepare()
+
+#################################################################
+# PATH #1
+# swap_shmem_alloc()
+#################################################################
+shmem_writepage()
+       ^
+       |
+       |--- __mpage_writepage()
+       |             ^
+       |             |--- mpage_writepages()
+       |             |--- mpage_writepage()
+       |
+       |--- writeout() <- fallback_migratepage() <- move_to_new_page()
+       |                                                   ^
+       |                                                   |--- __unmap_and_move()
+       |                                                   |--- unmap_and_move_huge_page()
+       |--- write_cache_pages()
+       |            ^
+       |            |--- mpage_writepages()
+       |            |--- generic_writepages()
+       |--- __writepage()
+       |--- write_one_page()
+       |--- pageout()
+
+#################################################################
+# PATH #2
+# swap_duplicate()
+#################################################################
+ swap_duplicate()
+        ^
+        |
+        |--- copy_one_pte() <- copy_pte_range() <- copy_pmd_range() <---------|
+        |                                                                     |
+        |      |-> copy_page_range() -> copy_p4d_range() <- copy_pud_range() -|
+        |      |
+        |      |- dup_mmap() <- dup_mm() <- copy_mm() <- copy_process()
+        |
+        |
+        |
+        |--- try_to_unmap_one()
+	            ^
+		    |
+		    |--- rmap_walk_anon() <-- rmap_walk() <--
+		    |                            |          |
+		    |--- ramp_walk_file() <-------          |---- remove_migration_ptes()
+							    |---- page_idle_clear_pte_refs()
+							    |---- page_referenced()
+							    |---- page_mkclean()
+							    |---- try_to_unmap()
+							    |---- try_to_munlock()
+
+#################################################################
+# PATH #3
+# swapcache_prepare()
+#################################################################
+__read_swap_cache_async()
+           ^
+	   |
+	   |--- read_swap_cache_async()
+	   |               ^
+	   |               |
+	   |               |--- swapin_walk_pmd_entry()
+	   |               |--- force_shm_swapin_readahead()
+	   |               |--- swapin_readahead()
+	   |               |--- do_swap_page_readahead()
+	   |               |--- try_to_unuse()
+	   |
+	   |--- swapin_readahead()
+	   |            ^
+	   |            |
+	   |            |--- do_swap_page()
+	   |            |--- shmem_swapin()
+	   |
+	   |--- do_swap_page_readahead() <- do_swap_page()
+	   |--- zswap_get_swap_cache_page() <- zswap_writeback_entry()

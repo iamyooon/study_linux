@@ -1,0 +1,31 @@
+
+update_process_times()
+        |
+        |
+        V
+run_posix_cpu_timers()
+        |
+        |--------------|
+        V              |
+check_thread_timers()  |
+        |              V
+        |   check_process_timers()
+        |--------------|
+	        |
+                V
+       soft rttime limit
+           != RLIM_INFINITY ? ------>
+                |
+	        | yes
+		V
+       hard rttime limit
+           != RLIM_INFINITY ? ---------------
+                |                           |
+	        | yes                       |
+		V                           |
+       task's running time            
+           > hard rttime limit ? -----------|
+                |
+	        | yes
+		V
+   send SIGKILL to task group

@@ -4,6 +4,13 @@ scheduler_tick()
 
 run_rebalance_domains()
      |
+     |
+     -----> nohz_idle_balance()
+     |              |
+     |              |
+     |              | using nohz.idle_cpus_mask
+     |              |
+     |              V
      -----> rebalance_domains()
                     |
 		    |                -------------------------------------------------------------------------------------------------------------------------------

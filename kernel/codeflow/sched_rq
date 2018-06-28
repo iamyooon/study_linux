@@ -1,0 +1,12 @@
+struct rq -----
+| .nr_running |                                    struct cfs_rq -----
+| .cfs--------|----------------------------------> | .nr_running     |
+| .rt---------|-----------------                   | .h_nr_running   |
+| .dl------   |                |                   | .tasks_timeline |
+----------|----                |                   | .rb_leftmost    |
+	  V                    |                   | .rq             |
+struct dl_rq ----              V                   -------------------
+|.rb_root       |     strcut rt_rq -----
+|.rb_leftmost   |     | .rt_nr_running |
+|.dl_nr_running |     | .rq            |
+-----------------     ------------------

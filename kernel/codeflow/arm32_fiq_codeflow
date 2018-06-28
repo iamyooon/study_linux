@@ -1,0 +1,32 @@
+fiq signal arrived
+     |
+     |
+     |-------------------------------
+     |               |              |
+__fiq_usr	__fiq_svc	__fiq_abt
+    |		     |
+    |		     |
+usr_entry	svc_entry
+    |                |
+     \              /
+      \            /
+       \          /
+        \        /
+         \      /
+          \    /
+           \  /
+	1) r0 = pt_regs
+	2) handle_fiq_as_nmi --------------
+                                          |
+                                          |
+                                          |
+     --------------------------------------------------------------------------------------------
+     |                        |                 |			|			|
+     |                        |                 |			|			|
+     |                        |                 |			|			|
+set_irq_regs()		 nmi_enter()	gpio_fiq_interrupt()	   nmi_exit()		set_irq_regs()
+- get recent pt_regs			- mask fiq					- set old pt_regs
+  of irq mode				- ack fiq					  of irq mode
+- set current pt_regs			- update ISR
+  of irq mode				- call interrupt_handler()	<-------------------------------- need to implement
+  					- unmask fiq

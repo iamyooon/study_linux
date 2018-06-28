@@ -1,0 +1,48 @@
+page allocation --> ... --| ---------------------------------------------
+                          V                                             |
+                   __alloc_pages_may_oom()  ---|                        |
+                                               V                        | All allocation
+           |------- oom_kill_process() <-- out_of_memory()              |  attempts fail case
+           V                                                            |
+     dump_header() - print oom message                        get_page_from_freelist()
+           |                                                     |
+	   | -------------------------------------------         |
+           | |XXX invoked oom-killer: gfp_mask=YYY,     |        V
+	   | | order=ZZZ, oom_adj=AAA, oom_score_adj=BBB|      warn_alloc() - print task name,
+           | |XXX cpuset=/ mems_allowed=CCC             |        |             alloc mode, nodemask
+           | -------------------------------------------         |   -------------------------------
+           |                                                     |  | XXX: page allocation failure: |
+	   |                                                     |  |      order:X, mode:0xXXXX     |
+           |                                                     V   -------------------------------
+            ------------------|------------------------ warn_alloc_show_mem()
+			      |
+			------|
+		       |
+		       V
+		   show_mem() - print header "Mem-info:"
+		       |
+		       |
+		       V
+		-> show_free_areas() - print generic system memory info
+		       |
+		       |
+		       V
+		------------------------------------------------------------
+		|Normal per-cpu:
+		|CPU    0: hi:   42, btch:   7 usd:   0
+		|active_anon:8357 inactive_anon:538 isolated_anon:0
+		|active_file:3818 inactive_file:3483 isolated_file:0
+		|unevictable:0 dirty:3 writeback:0 unstable:0
+		|free:1012 slab_reclaimable:1252 slab_unreclaimable:6596
+		|mapped:2000 shmem:771 pagetables:344 bounce:0
+		|free_cma:257
+		|
+		|Normal free:4048kB ...
+		|Normal: 340*4kB (UEMCR) 109*8kB (UEMR) 38*16kB (UEMR) ...
+		|8077 total pagecache pages
+		|...
+		|1537 free pages
+		|4924 reserved pages
+		|4583 slab pages
+		|...
+		-----------------------------------------------------------

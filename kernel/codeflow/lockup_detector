@@ -1,0 +1,20 @@
+per-cpu watchdog thread setup
+
+kernel_init_freeable()
+-> lockup_detector_init()
+->-> watchdog_enable_all_cpus()
+->->-> smpboot_register_percpu_thread_cpumask()
+->->->-> __smpboot_create_thread()
+->->->->-> create kthread with smpboot_thread_fn
+->->->->-> unpark kthread of cpumask passed
+
+언제 wakeup되지???
+
+smpboot_thread_fn()
+1) HP_THREAD_NONE
+- set task as TASK_RUNNING
+- preempt enable???
+- call watchdog_enable() 
+-- hrtimer init
+
+

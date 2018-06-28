@@ -1,0 +1,10 @@
+=========
+v3.18
+=========
+1) exception handling
+2) return migrate type from gfpflag
+ - return MIGRATE_UNMOVABLE ->
+ - return MIGRATE_MOVABLE ->
+ - return MIGRATE_RECLAIMABLE ->
+ - return MIGRATE_HIGHATOMIC ->
+ - return MIGRATE_CMA ->

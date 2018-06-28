@@ -1,0 +1,4 @@
+  wait4
+system-call
+-> kernel_wait4()
+   -> do_wait()

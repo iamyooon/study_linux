@@ -1,0 +1,29 @@
+call systemcall
+sched_setattr()             *Userspace
+-------------------------------------------
+sys_sched_setattr()
+ 1) check invalid parameter -> return -EINVAL
+ 2) copy @uattr to attr
+ 3) check invalid attr.sched_policy -> return -EINVAL
+ 4) get task_struct pointer using @pid
+ 5) sched_setattr(p, &attr)
+        |
+	V
+sched_setattr()
+ 1) __sched_setscheduler(p, attr, true, true)
+        |
+	V
+__sched_setscheduler()                                       *Kernelspace
+ 1) check invalid policy -> return -EINVAL
+ 2) if policy < 0, policy = oldpolicy = p->policy
+ 3) set reset_on_fork
+
+        |
+	V
+__setscheduler()
+        |
+	V
+__setscheduler_params()
+        |
+	V
+__setparam_dl()

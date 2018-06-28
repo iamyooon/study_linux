@@ -1,0 +1,17 @@
+  systemcall
+    REBOOT
+      |
+      | cmd=LINUX_REBOOT_CMD_RESTART
+      V
+kernel_restart()
+      |
+      |---------------------------
+      V                          V
+kernel_restart_prepare()  machine_restart()
+- call reboot_notifier    - disable local irq
+- system_state            - smp_send_stop()
+  = SYSTEM_RESTART        - do_kernel_restart()
+- device_shutdown()                 |
+                                    |
+				    V
+			  call restart_handler_list

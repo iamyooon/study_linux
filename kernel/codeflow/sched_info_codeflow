@@ -1,0 +1,46 @@
+================================
+last_queued, last_arrival
+================================
+- last_arrival
+태스크가 마지막으로 cpu를 쓰기 시작한 시간을 나타냄
+- last_queued
+태스크가 마지막으로 런큐에 enqueue된 시간을 나타냄.
+
+태스크가 sched-in될 때 last_arrival을 현재시각으로 갱신한다.
+last_arrival 필드가 갱신된 태스크는 last_queued 필드를 0으로 초기화한다.
+
+__schedule()
+|- context_switch()
+   |- prepare_task_switch()
+      |- __sched_info_switch()
+         |- sched_info_arrive()
+	    |- sched_info_reset_dequeued()
+	    |  |- last_queued = 0
+	    |- last_arrival = now
+
+태스크가 dequeue되면 last_queued 필드를 0으로 초기화한다.
+dequeue_task()
+|- sched_info_dequeued()
+   |- sched_info_reset_dequeued()
+      |- last_queued = 0
+
+
+last_queued 필드는 sched-out시에 태스크가 TASK_RUNNNG 상태라면 last_queued 필드를 현재시간으로 갱신한다.
+
+__schedule()
+|- context_switch()
+   |- prepare_task_switch()
+      |- __sched_info_switch()
+         |- sched_info_depart()
+	    |- sched_info_queued() *IF TASK_RUNNING*
+	       |- last_queued = now  *IF !last_queued*
+
+태스크가 enqueue될 때도 현재시간으로 갱신된다.
+enqueue_task()
+|- sched_info_queued() *IF !ENQUEUE_RESTORE*
+   |- last_queued = now  *IF !last_queued*
+
+
+
+TBD. last_queued 정보가 이렇게 날라가도 되는건가??? 굳이 0으로 만들어서 머하나...
+TBD. swapper는 왜 last_queued, last_arrival 모두 0일까???

@@ -1,0 +1,41 @@
+Q1.Which functions does fallback-allocation?
+A1.__rmqueue_fallback()
+
+Q2.What is the codeflow that calls __rmqueue_fallback()?
+A2.refer to below
+
+get_page_from_freelist()
+   |
+   V
+rmqueue()
+   |-----------------> rmqueue_pcplist()
+   |                   __rmqueue_pcplist()
+   |                   rmqueue_bulk()
+   |                         |
+   |-------------------------|
+                  |
+		  V
+             __rmqueue()
+	          |
+		  V
+         __rmqeueue_fallback()
+
+Q3. get_page_from_freelist()를 호출하는 경우는?
+A3.
+   2   3292  mm/page_alloc.c <<__alloc_pages_cpuset_fallback>>
+             page = get_page_from_freelist(gfp_mask, order,
+   3   3299  mm/page_alloc.c <<__alloc_pages_cpuset_fallback>>
+             page = get_page_from_freelist(gfp_mask, order,
+   4   3337  mm/page_alloc.c <<__alloc_pages_may_oom>>
+             page = get_page_from_freelist((gfp_mask | __GFP_HARDWALL) &
+   5   3426  mm/page_alloc.c <<__alloc_pages_direct_compact>>
+             page = get_page_from_freelist(gfp_mask, order, alloc_flags, ac);
+   6   3640  mm/page_alloc.c <<__alloc_pages_direct_reclaim>>
+             page = get_page_from_freelist(gfp_mask, order, alloc_flags, ac);
+   7   3953  mm/page_alloc.c <<__alloc_pages_slowpath>>
+             page = get_page_from_freelist(gfp_mask, order, alloc_flags, ac);
+   8   4023  mm/page_alloc.c <<__alloc_pages_slowpath>>
+             page = get_page_from_freelist(gfp_mask, order, alloc_flags, ac);
+   9   4224  mm/page_alloc.c <<__alloc_pages_nodemask>>
+             page = get_page_from_freelist(alloc_mask, order, alloc_flags, &ac);
+
