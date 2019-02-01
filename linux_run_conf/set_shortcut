@@ -20,6 +20,8 @@ alias grh='git reset HEAD^1 --hard'
 alias gr='git reset HEAD^1'
 alias gr2='git reset HEAD~2'
 
+alias mkc='make clean'
+
 alias cd1='cd ../'
 alias cd2='cd ../..'
 alias cd3='cd ../../../'
