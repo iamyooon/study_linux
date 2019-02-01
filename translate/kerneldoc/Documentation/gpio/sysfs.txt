@@ -1,125 +1,104 @@
+유저스페이스에서의 (GPIO 제어를 위한) GPIO sysfs 인터페이스
 GPIO Sysfs Interface for Userspace
 ==================================
 
-Platforms which use the "gpiolib" implementors framework may choose to
-configure a sysfs user interface to GPIOs. This is different from the
-debugfs interface, since it provides control over GPIO direction and
-value instead of just showing a gpio state summary. Plus, it could be
-present on production systems without debugging support.
+"gpiolib" implementors framework를 사용하는 플랫폼은 sysfs 유저 인터페이스를 GPIO로 구성하도록 선택할 수 있다. 이는 gpio 상태 요약을 표시하는 대신 GPIO 의 direction과 value를 제어 할 수 있기 때문에 debugfs 인터페이스와 다르다. 또한 debugging support 없이 production system에 있을 수 있다.
+Platforms which use the "gpiolib" implementors framework may choose to configure a sysfs user interface to GPIOs. This is different from the debugfs interface, since it provides control over GPIO direction and value instead of just showing a gpio state summary. Plus, it could be present on production systems without debugging support.
 
-Given appropriate hardware documentation for the system, userspace could
-know for example that GPIO #23 controls the write protect line used to
-protect boot loader segments in flash memory. System upgrade procedures
-may need to temporarily remove that protection, first importing a GPIO,
-then changing its output state, then updating the code before re-enabling
-the write protection. In normal use, GPIO #23 would never be touched,
-and the kernel would have no need to know about it.
+시스템에 대한 적절한 HW 문서가 있으면 유저스페이스는 예를 들어 GPIO 23핀이 플래시 메모리의 부트 로더 세그먼트를 보호하는 데 사용되는 쓰기 보호 라인을 제어한다는 것을 알 수 있다. 시스템 업그레이드 절차에서는 일시적으로 GPIO를 가져온 다음 출력 상태를 변경 한 다음 쓰기 보호를 다시 활성화하기 전에 코드를 업데이트해야 보호 기능을 일시적으로 제거해야 할 수 있다. 정상적인 사용에서, GPIO 23핀은 절대로 손대지 않을 것이며, 커널은 그것에 대해 알 필요가 없다.
+Given appropriate hardware documentation for the system, userspace could know for example that GPIO #23 controls the write protect line used to protect boot loader segments in flash memory. System upgrade procedures may need to temporarily remove that protection, first importing a GPIO, then changing its output state, then updating the code before re-enabling the write protection. In normal use, GPIO #23 would never be touched, and the kernel would have no need to know about it.
 
-Again depending on appropriate hardware documentation, on some systems
-userspace GPIO can be used to determine system configuration data that
-standard kernels won't know about. And for some tasks, simple userspace
-GPIO drivers could be all that the system really needs.
+적절한 HW 문서에 따라 일부 시스템에서 유저스페이스 GPIO(역주.GPIO sysfs를 가리키는 것으로 보임)를 사용하여 표준 커널이 알 수없는 시스템 구성 데이터를 결정할 수 있다. 그리고 일부 작업의 경우 단순한 유저스페이스 GPIO 드라이버만으로 시스템에 필요한 모든 것을 처리할 수도 있다.
+Again depending on appropriate hardware documentation, on some systems userspace GPIO can be used to determine system configuration data that standard kernels won't know about. And for some tasks, simple userspace GPIO drivers could be all that the system really needs.
 
-DO NOT ABUSE SYSFS TO CONTROL HARDWARE THAT HAS PROPER KERNEL DRIVERS.
-PLEASE READ THE DOCUMENT NAMED "drivers-on-gpio.txt" IN THIS DOCUMENTATION
-DIRECTORY TO AVOID REINVENTING KERNEL WHEELS IN USERSPACE. I MEAN IT.
-REALLY.
+올바른 커널 드라이버가 있는 HW를 제어하기 위해 SYSFS를 사용하지는 말아야 한다. 유저스페이스에서 kernel wheel을 다시 발명하는 것을 피하기 위해 이 문서 디렉토리에 "drivers-on-gpio.txt"라는 제목의 문서를 읽자. 정말로 진심이다.
+DO NOT ABUSE SYSFS TO CONTROL HARDWARE THAT HAS PROPER KERNEL DRIVERS.  PLEASE READ THE DOCUMENT NAMED "drivers-on-gpio.txt" IN THIS DOCUMENTATION DIRECTORY TO AVOID REINVENTING KERNEL WHEELS IN USERSPACE. I MEAN IT.  REALLY.
 
 Paths in Sysfs
 --------------
+/sys/class/gpio에는 세 종류의 항목이 있다.
 There are three kinds of entries in /sys/class/gpio:
 
-   -	Control interfaces used to get userspace control over GPIOs;
+- 유저인터페이스에서 GPIO를 제어하는 데 사용되는 제어 인터페이스.
+- Control interfaces used to get userspace control over GPIOs;
 
-   -	GPIOs themselves; and
+- GPIO 자체, 그리고
+- GPIOs themselves; and
 
-   -	GPIO controllers ("gpio_chip" instances).
+- GPIO 컨트롤러("gpio_chip" 인스턴스).
+- GPIO controllers("gpio_chip" instances).
 
+이것은 "device" 심볼릭 링크를 포함한 표준 파일에 추가된다.
 That's in addition to standard files including the "device" symlink.
 
+제어 인터페이스는 쓰기 전용이다.
 The control interfaces are write-only:
 
-    /sys/class/gpio/
+/sys/class/gpio/
 
-    	"export" ... Userspace may ask the kernel to export control of
-		a GPIO to userspace by writing its number to this file.
+"export"... 유저스페이스에서 GPIO 번호를 이 파일에 쓰면 커널에게 유저스페이스로 인터페이스를 내보낼 것을 요청할 수 있다.
+"export" ... Userspace may ask the kernel to export control of a GPIO to userspace by writing its number to this file.
 
-		Example:  "echo 19 > export" will create a "gpio19" node
-		for GPIO #19, if that's not requested by kernel code.
+예 : "echo 19> export"가 GPIO 19핀에 대한 "gpio19" 노드를 생성한다(커널 코드에 의해 사용중이지 않은 경우 역주. gpio_request()로 예약된 핀이 아닐 경우).
+Example:  "echo 19 > export" will create a "gpio19" node for GPIO #19, if that's not requested by kernel code.
 
-    	"unexport" ... Reverses the effect of exporting to userspace.
+"unexport"... 유저스페이스에 생성한 인터페이스를 제거한다.
+"unexport" ... Reverses the effect of exporting to userspace.
 
-		Example:  "echo 19 > unexport" will remove a "gpio19"
-		node exported using the "export" file.
+예 : "echo 19> unexport"는 "export"파일을 사용하여 생성한 "gpio19"노드를 제거한다.
+Example:  "echo 19 > unexport" will remove a "gpio19" node exported using the "export" file.
 
-GPIO signals have paths like /sys/class/gpio/gpio42/ (for GPIO #42)
-and have the following read/write attributes:
+GPIO 신호는 /sys/class/gpio/gpio42/(GPIO 42핀)와 같은 경로를 가지며 다음과 같은 R/W 속성을 갖는다.
+GPIO signals have paths like /sys/class/gpio/gpio42/ (for GPIO #42) and have the following read/write attributes:
 
-    /sys/class/gpio/gpioN/
+/sys/class/gpio/gpioN/
 
-	"direction" ... reads as either "in" or "out". This value may
-		normally be written. Writing as "out" defaults to
-		initializing the value as low. To ensure glitch free
-		operation, values "low" and "high" may be written to
-		configure the GPIO as an output with that initial value.
+"direction"
+"in"또는 "out"중 하나가 읽힌다. 일반적으로 값을 파일에 쓸 수 있다. "out"으로 쓰는 것은 기본적으로 핀의 값을 low로 초기화한다. 글리치가 없는 동작을 보장하기 위해 GPIO를 초기 값으로 출력으로 구성하기 위해 "low" 및 "high" 값을 쓸 수 있다.
+"direction" ... reads as either "in" or "out". This value may normally be written. Writing as "out" defaults to initializing the value as low. To ensure glitch free operation, values "low" and "high" may be written to configure the GPIO as an output with that initial value.
 
-		Note that this attribute *will not exist* if the kernel
-		doesn't support changing the direction of a GPIO, or
-		it was exported by kernel code that didn't explicitly
-		allow userspace to reconfigure this GPIO's direction.
+커널이 GPIO의 direction 변경을 지원하지 않거나 명시적으로 유저스페이스에서 이 GPIO핀의 direction을 재구성하도록 허용하지 않은 커널 코드에 의해 export 된 경우 이 속성은 존재하지 않는다.
+Note that this attribute *will not exist* if the kernel doesn't support changing the direction of a GPIO, or it was exported by kernel code that didn't explicitly allow userspace to reconfigure this GPIO's direction.
 
-	"value" ... reads as either 0 (low) or 1 (high). If the GPIO
-		is configured as an output, this value may be written;
-		any nonzero value is treated as high.
+"value"
+0(low) 또는 1(high)으로 읽는다. GPIO의 direction이 output으로 설정된 경우 이 값을 쓸 수 있다. 0이 아닌 값은 high로 처리된다.
+"value" ... reads as either 0 (low) or 1 (high). If the GPIO is configured as an output, this value may be written; any nonzero value is treated as high.
 
-		If the pin can be configured as interrupt-generating interrupt
-		and if it has been configured to generate interrupts (see the
-		description of "edge"), you can poll(2) on that file and
-		poll(2) will return whenever the interrupt was triggered. If
-		you use poll(2), set the events POLLPRI and POLLERR. If you
-		use select(2), set the file descriptor in exceptfds. After
-		poll(2) returns, either lseek(2) to the beginning of the sysfs
-		file and read the new value or close the file and re-open it
-		to read the value.
+핀을 interrupt-generating interrupt로 구성 할 수 있고(역주. 핀 컨트롤을 통해 인터럽트를 발생시킬 수 있고) 인터럽트를 생성하도록 구성된 경우( "edge"설명 참조) 해당 파일에 대해 poll(2)을 할 수 있고 poll(2)은 인터럽트가 발생할 때마다 리턴된다. poll(2)을 사용하는 경우 POLLPRI 및 POLLERR 이벤트를 설정해야 한다. select(2)를 사용하는 경우 exceptfds에 파일 설명자를 설정해야 한다. poll(2)가 반환 된 후 sysfs 파일의 시작 부분에 lseek(2)를 입력하고 새 값을 읽거나 파일을 닫은 다음 다시 열어 값을 읽는다.
+If the pin can be configured as interrupt-generating interrupt and if it has been configured to generate interrupts (see the description of "edge"), you can poll(2) on that file and poll(2) will return whenever the interrupt was triggered. If you use poll(2), set the events POLLPRI and POLLERR. If you use select(2), set the file descriptor in exceptfds. After poll(2) returns, either lseek(2) to the beginning of the sysfs file and read the new value or close the file and re-open it to read the value.
 
-	"edge" ... reads as either "none", "rising", "falling", or
-		"both". Write these strings to select the signal edge(s)
-		that will make poll(2) on the "value" file return.
+"edge"
+"none", "rising", "falling"또는 "both"중 하나를 읽을 수 있다. "value" 파일을 에서 poll(2)을 반환 할 signal edge를 선택하려면 이 문자열을 작성하십시오.
+"edge" ... reads as either "none", "rising", "falling", or "both". Write these strings to select the signal edge(s) that will make poll(2) on the "value" file return.
 
-		This file exists only if the pin can be configured as an
-		interrupt generating input pin.
+이 파일은 핀을 인터럽트 생성 입력 핀으로 구성 할 수있는 경우에만 존재한다.
+This file exists only if the pin can be configured as an interrupt generating input pin.
 
-	"active_low" ... reads as either 0 (false) or 1 (true). Write
-		any nonzero value to invert the value attribute both
-		for reading and writing. Existing and subsequent
-		poll(2) support configuration via the edge attribute
-		for "rising" and "falling" edges will follow this
-		setting.
+"active_low"... 0 (거짓) 또는 1 (참)으로 읽는다. 0이 아닌 값을 작성하여 읽기 및 쓰기 모두 값 특성을 반전하십시오. "상승"및 "하강"에지에 대한 에지 속성을 통한 기존 및 후속 폴 (2) 지원 구성이이 설정을 따릅니다.
+"active_low" ... reads as either 0 (false) or 1 (true). Write any nonzero value to invert the value attribute both for reading and writing. Existing and subsequent poll(2) support configuration via the edge attribute for "rising" and "falling" edges will follow this setting.
 
-GPIO controllers have paths like /sys/class/gpio/gpiochip42/ (for the
-controller implementing GPIOs starting at #42) and have the following
-read-only attributes:
+GPIO 컨트롤러에는 / sys / class / gpio / gpiochip42 / (# 42에서 시작하는 GPIO를 구현하는 컨트롤러 용)와 같은 경로가 있으며 다음과 같은 읽기 전용 속성이 있다.
+GPIO controllers have paths like /sys/class/gpio/gpiochip42/ (for the controller implementing GPIOs starting at #42) and have the following read-only attributes:
 
-    /sys/class/gpio/gpiochipN/
+/sys/class/gpio/gpiochipN/
 
-    	"base" ... same as N, the first GPIO managed by this chip
+"base"...이 칩이 관리하는 첫 번째 GPIO 인 N과 같습니다.
+"base" ... same as N, the first GPIO managed by this chip
 
-    	"label" ... provided for diagnostics (not always unique)
+"레이블"... 진단을 위해 제공됨 (항상 고유하지는 않음)
+"label" ... provided for diagnostics (not always unique)
 
-        "ngpio" ... how many GPIOs this manages (N to N + ngpio - 1)
+"ngpio"... 관리하는 GPIO 수 (N ~ N + N GPIO - 1)
+"ngpio" ... how many GPIOs this manages (N to N + ngpio - 1)
 
-Board documentation should in most cases cover what GPIOs are used for
-what purposes. However, those numbers are not always stable; GPIOs on
-a daughtercard might be different depending on the base board being used,
-or other cards in the stack. In such cases, you may need to use the
-gpiochip nodes (possibly in conjunction with schematics) to determine
-the correct GPIO number to use for a given signal.
+대부분의 경우 보드 문서에는 어떤 목적으로 GPIO가 사용되는지가 포함되어야한다. 그러나 그 수는 항상 안정적이지는 않는다. 도터 카드의 GPIO는 사용중인베이스 보드 또는 스택의 다른 카드에 따라 다를 수 있다. 이러한 경우 gpiochip 노드 (회로도와 함께 사용 가능)를 사용하여 주어진 신호에 사용할 올바른 GPIO 번호를 결정해야 할 수 있다.
+Board documentation should in most cases cover what GPIOs are used for what purposes. However, those numbers are not always stable; GPIOs on a daughtercard might be different depending on the base board being used, or other cards in the stack. In such cases, you may need to use the gpiochip nodes (possibly in conjunction with schematics) to determine the correct GPIO number to use for a given signal.
 
 
 Exporting from Kernel code
 --------------------------
-Kernel code can explicitly manage exports of GPIOs which have already been
-requested using gpio_request():
+커널 코드는 gpio_request ()를 사용하여 이미 요청 된 GPIO의 내보내기를 명시 적으로 관리 할 수 있다.
+Kernel code can explicitly manage exports of GPIOs which have already been requested using gpio_request():
 
 	/* export the GPIO to userspace */
 	int gpiod_export(struct gpio_desc *desc, bool direction_may_change);
@@ -128,19 +107,13 @@ requested using gpio_request():
 	void gpiod_unexport(struct gpio_desc *desc);
 
 	/* create a sysfs link to an exported GPIO node */
-	int gpiod_export_link(struct device *dev, const char *name,
-		      struct gpio_desc *desc);
+	int gpiod_export_link(struct device *dev, const char *name, struct gpio_desc *desc);
 
-After a kernel driver requests a GPIO, it may only be made available in
-the sysfs interface by gpiod_export(). The driver can control whether the
-signal direction may change. This helps drivers prevent userspace code
-from accidentally clobbering important system state.
+커널 드라이버가 GPIO를 요청한 후에는 gpiod_export ()에 의해 sysfs 인터페이스에서만 사용할 수 있다. 드라이버는 신호 방향이 변경 될지 여부를 제어 할 수 있다. 이것은 운전자가 유저스페이스 코드가 실수로 중요한 시스템 상태를 벗어나는 것을 방지한다.
+After a kernel driver requests a GPIO, it may only be made available in the sysfs interface by gpiod_export(). The driver can control whether the signal direction may change. This helps drivers prevent userspace code from accidentally clobbering important system state.
 
-This explicit exporting can help with debugging (by making some kinds
-of experiments easier), or can provide an always-there interface that's
-suitable for documenting as part of a board support package.
+이 명시적 내보내기는 (몇가지 실험을 쉽게 만들어서) 디버깅에 도움이 되거나 보드 지원 패키지의 일부로 문서화하기에 적합한 항상 존재하는 인터페이스를 제공 할 수 있다.
+This explicit exporting can help with debugging (by making some kinds of experiments easier), or can provide an always-there interface that's suitable for documenting as part of a board support package.
 
-After the GPIO has been exported, gpiod_export_link() allows creating
-symlinks from elsewhere in sysfs to the GPIO sysfs node. Drivers can
-use this to provide the interface under their own device in sysfs with
-a descriptive name.
+GPIO를 내보낸 후 gpiod_export_link()를 사용하면 sysfs의 다른 곳에서 GPIO sysfs 노드로 심볼릭 링크를 만들 수 있다. 드라이버는 이것을 사용하여 sysfs의 고유 장치 아래에 인터페이스를 설명하는 이름으로 제공 할 수 있다.
+After the GPIO has been exported, gpiod_export_link() allows creating symlinks from elsewhere in sysfs to the GPIO sysfs node. Drivers can use this to provide the interface under their own device in sysfs with a descriptive name.
