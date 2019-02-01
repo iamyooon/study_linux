@@ -1,0 +1,62 @@
+Atomic context and kernel API design
+https://lwn.net/Articles/274695/
+By Jonathan Corbet
+March 25, 2008
+
+API는 지킬 수 없는 약속은 삼가해야 한다. 커널의 in_atomic () 매크로를 포함하는 최근의 일화에서 함수가 보이는 것과 다르게 동작할 경우 어떻게 상황이 잘못되는지를 보여준다. 또한 커널 코드 디자에 대한 문서화되지 않은 (근본적인) 측면을 살펴 보는 것도 good excuse이다.
+An API should refrain from making promises that it cannot keep. A recent episode involving the kernel's in_atomic() macro demonstrates how things can go wrong when a function does not really do what it appears to do. It is also a good excuse to look at an under-documented (but fundamental) aspect of kernel code design.
+
+커널 코드는 일반적으로 두 가지 기본 컨텍스트 중 하나에서 실행된다. process context는 커널이 (일반적으로) 유저 프로세스 대신 직접 실행될 때 reign한다. 시스템 호출을 구현하는 코드가 하나의 예이다. process context에서 커널이 실행 중일 때 필요하면 sleep 상태로 전환 할 수 있다. 그러나 커널이 atomic context에서 실행될 때, sleep 같은 동작은 허용되지 않는다. 하드웨어 및 소프트웨어 인터럽트를 처리하는 코드는 atomic context의 명확한 예이다.
+Kernel code generally runs in one of two fundamental contexts. Process context reigns when the kernel is running directly on behalf of a (usually) user-space process; the code which implements system calls is one example. When the kernel is running in process context, it is allowed to go to sleep if necessary. But when the kernel is running in atomic context, things like sleeping are not allowed. Code which handles hardware and software interrupts is one obvious example of atomic context.
+
+그러나 그것보다 더 많은 것이 있다: 모든 커널 함수는 spinlock을 획득하는 순간 atomic context로 진입한다. spinlock이 구현되는 방식을 감안할 때, 락을 잡고 있는 상황에서 sleep 상태로 전환하는 것은 fatal error이다. 다른 커널 함수가 동일한 락을 얻으려고하면 시스템은 거의 확실히 교착 상태에 빠지게된다.
+There is more to it than that, though: any kernel function moves into atomic context the moment it acquires a spinlock. Given the way spinlocks are implemented, going to sleep while holding one would be a fatal error; if some other kernel function tried to acquire the same lock, the system would almost certainly deadlock forever.
+
+"Deadlocking forever"는 유저가 커널에게 기대하는게 아니므로 커널 개발자는 이러한 상황을 피하기 위해 go out of their way하게 된다. 이를 위해 atomic context에서 실행되는 코드는 (1)사용자 공간에 대한 액세스가 없으며, 결정적으로, (2) sleep 상태로 전환하지 않는 등 여러 가지 규칙을 신중하게 따라야한다. 특정 커널 함수가 호출 될 수있는 문맥을 알지 못하는 경우 문제가 발생할 수 있다. 예를 들어 kmalloc() API는 명시적 인수(GFP_KERNEL 또는 GFP_ATOMIC)를 사용하여 sleep 가능 여부를 지정한다.
+"Deadlocking forever" tends not to appear on users' wishlists for the kernel, so the kernel developers go out of their way to avoid that situation. To that end, code which is running in atomic context carefully follows a number of rules, including (1) no access to user space, and, crucially, (2) no sleeping. Problems can result, though, when a particular kernel function does not know which context it might be invoked in. The classic example is kmalloc() and friends, which take an explicit argument (GFP_KERNEL or GFP_ATOMIC) specifying whether sleeping is possible or not.
+
+두 상황에서 최적으로 작동 할 수있는 코드를 작성하고자하는 것이 일반적이다. 일부 개발자는 그러한 코드를 작성하는 동안 <linux / hardirq.h>에서 다음 정의를 우연히 발견 할 수 있다.
+The wish to write code which can work optimally in either context is common, though. Some developers, while trying to write such code, may well stumble across the following definitions from <linux/hardirq.h>:
+
+/*
+* Are we doing bottom half or hardware interrupt processing?
+* Are we in a softirq context? Interrupt context?
+*/
+#define in_irq()	   (hardirq_count())
+#define in_softirq()   (softirq_count())
+#define in_interrupt() (irq_count())
+
+#define in_atomic()	   ((preempt_count() & ~PREEMPT_ACTIVE) != 0)
+
+in_atomic()은 코드의 특정 비트가 특정 시간에 atomic한  방식으로 작동해야하는지 여부를 결정하려고하는 개발자의 요구에 적합 할 것으로 보인다. 커널 소스를 빠르게 검색(grep)한 결과가 말하기를 사실, in_atomic()이 목적과 달리 상당히 다른 장소에서 사용됨을 보여준다. 단 하나의 문제가 있다. 바로 이러한 용도는 거의 틀림없이 모두 잘못되었다는 것이다.
+It would seem that in_atomic() would fit the bill for any developer trying to decide whether a given bit of code needs to act in an atomic manner at any specific time. A quick grep through the kernel sources shows that, in fact, in_atomic() has been used in quite a few different places for just that purpose. There is only one problem: those uses are almost certainly all wrong.
+
+in_atomic() 매크로는 선점이 사용 중지되었는지 여부를 확인하며 올바르게 작동하는 것처럼 보인다. 하드웨어 인터럽트와 같은 이벤트 핸들러는 선점을 비활성화하지만 spinlock을 획득한다. 따라서이 테스트는 sleep하면 안되는 모든 경우를 캐치하는 것처럼 보인다. 확실히 이 매크로를 보아온 많은 사람들이 위와 같은 결론에 도달했다.
+The in_atomic() macro works by checking whether preemption is disabled, which seems like the right thing to do. Handlers for events like hardware interrupts will disable preemption, but so will the acquisition of a spinlock. So this test appears to catch all of the cases where sleeping would be a bad idea. Certainly a number of people who have looked at this macro have come to that conclusion.
+
+그러나 커널선점(CONFIG_PREEMPT?)이 설정되어 있지 않으면 커널은 spinlock을 획득 할 때 "preemption count"를 높이지 않는다. 따라서 이 상황(일반적으로 많은 배포자가 여전히 커널에서 선매를 사용할 수 없음, 이 글이 2008년도에 나왔음을 감안해야 함)에서 in_atomic()은 호출 코드가 spinlock을 보유하고 있는지 여부를 알 수 없다. 따라서 spinlock이 유지되는 경우에도 process context를 나타내는 0을 반환한다. 그리고 실제로 커널 코드가 process context에서 실행 중이고 그에 따라 작동한다고 생각할 수도 있다.
+But if preemption has not been configured into the kernel in the first place, the kernel does not raise the "preemption count" when spinlocks are acquired. So, in this situation (which is common - many distributors still do not enable preemption in their kernels), in_atomic() has no way to know if the calling code holds any spinlocks or not. So it will return zero (indicating process context) even when spinlocks are held. And that could lead to kernel code thinking that it is running in process context (and acting accordingly) when, in fact, it is not.
+
+이 문제가 주어지면 기능이 왜 처음에 존재하는지, 왜 사람들이 그것을 사용하는지, 그리고 개발자가 실제로 잠들지 않느냐 여부에 대해 어떻게 처리 할 수 있는지 궁금해 할 것이다. 앤드류 모튼 (Andrew Morton)은 첫 번째 질문에 비교적 비밀스러운 방식으로 대답했다.
+Given this problem, one might well wonder why the function exists in the first place, why people are using it, and what developers can really do to get a handle on whether they can sleep or not. Andrew Morton answered the first question in a relatively cryptic way:
+
+in_atomic ()은 커널 코어 코드에서만 사용된다. 특수 상황(예 : kmap_atomic ())에서는 pre-preemptible 커널에서도 inc_preempt_count()를 실행하여 kmap_atomic() 내에서 copy_*_user()에 의해 호출 된 아키텍쳐별로 구현된 fault 핸들러에게 알려주고 실패해야한다???.
+in_atomic() is for core kernel use only. Because in special circumstances (ie: kmap_atomic()) we run inc_preempt_count() even on non-preemptible kernels to tell the per-arch fault handler that it was invoked by copy_*_user() inside kmap_atomic(), and it must fail.
+
+즉, in_atomic()은 특정 저수준 상황에서 작동하지만 더 넓은 맥락에서 사용되는 것을 의미하지는 않다. 다른 곳에서 사용할 수있는 매크로 옆에 hardirq.h를 배치 한 것은 거의 실수였다. Alan Stern이 지적했듯이, Linux Device Drivers가 in_atomic()을 사용하도록 권장한다는 사실이 이 상황을 도왔을 것이다. 귀하의 편집인은 그 책의 저자들이 즉시 해고 될 것을 권고한다.
+In other words, in_atomic() works in a specific low-level situation, but it was never meant to be used in a wider context. Its placement in hardirq.h next to macros which can be used elsewhere was, thus, almost certainly a mistake. As Alan Stern pointed out, the fact that Linux Device Drivers recommends the use of in_atomic() will not have helped the situation. Your editor recommends that the authors of that book be immediately sacked.
+
+이러한 실수가 해결되면 커널 코드가 atomic context에서 실행되는지 여부를 결정하는 방법에 대한 질문이 여전히 있다. 진정한 대답은 단지 그렇게 할 수 없다는 것이다. Andrew Morton을 다시 인용하면 :
+Once these mistakes are cleared up, there is still the question of just how kernel code should decide whether it is running in an atomic context or not. The real answer is that it just can't do that. Quoting Andrew Morton again:
+
+커널에서 사용하는 일관된 패턴은 호출자가 스케줄 가능한 컨텍스트에서 실행 중인지 여부를 추적하고 필요하면 피호출자에게 알려주는 것이다. 피 호출자는 스스로 해결하지 못한다.
+The consistent pattern we use in the kernel is that callers keep track of whether they are running in a schedulable context and, if necessary, they will inform callees about that. Callees don't work it out for themselves.
+
+이 패턴은 커널을 살펴보면 일관성있게 유지되고 있다. 다시 한번 GFP_ 플래그 예제가 이 점에서 두드러집니다. 그러나 커널 개발자들이 이런 방식으로 해야 한다는 것을 이해할 수 있도록 이 관행이 문서화되어 있지 않다는 것도 분명한다. 대부분의 사람들보다 이 이슈를 더 잘 이해하고있는 러스티 러셀 (Rusty Russell)의 최근 포스팅을 참고하자:
+This pattern is consistent through the kernel - once again, the GFP_ flags example stands out in this regard. But it's also clear that this practice has not been documented to the point that kernel developers understand that things should be done this way. Consider this recent posting from Rusty Russell, who understands these issues better than most:
+
+이 플래그는 메모리가 즉시 사용 가능하지 않을 때 할당자가 수행해야하는 작업을 나타낸다. 메모리가 해제되거나 스왑 아웃되는 동안 기다리거나(GFP_KERNEL) 즉시 NULL을 반환해야하는지(GFP_ATOMIC) 여부를 나타낸다. 그리고 이 플래그는 완전히 중복되어 있다 : kmalloc()는 스스로 sleep 가능 여부를 알아 낼 수 있다.
+This flag indicates what the allocator should do when no memory is immediately available: should it wait (sleep) while memory is freed or swapped out (GFP_KERNEL), or should it return NULL immediately (GFP_ATOMIC). And this flag is entirely redundant: kmalloc() itself can figure out whether it is able to sleep or not.
+
+사실 kmalloc()은 sleep 가능 여부를 스스로 알 수 없다. 호출자가 이를 알려줘야 한다. 이 규칙은 변경될 가능성이 없기 때문에 2.6.26부터 시작하는 일련의 in_atomic() 제거 패치를 기대하자. 이 작업이 완료되면 in_atomic () 매크로를 더 혼란스럽지 않게 안전한 장소로 이동할 수 있다.
+In fact, kmalloc() cannot figure out on its own whether sleeping is allowable or not. It has to be told by the caller. This rule is unlikely to change, so expect a series of in_atomic() removal patches starting with 2.6.26. Once that work is done, the in_atomic() macro can be moved to a safer place where it will not create further confusion.
