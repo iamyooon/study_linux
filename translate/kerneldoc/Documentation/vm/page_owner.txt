@@ -1,0 +1,53 @@
+page owner: Tracking about who allocated each page
+page owner: 각 페이지의 소유자 추적하기
+-----------------------------------------------------------
+
+* Introduction
+* 도입부
+
+page owner is for the tracking about who allocated each page.  It can be used to debug memory leak or to find a memory hogger.  When allocation happens, information about allocation such as call stack and order of pages is stored into certain storage for each page.  When we need to know about status of all pages, we can get and analyze this information.
+페이지 오너는 각 페이지를 누가 할당했는지 추적하는 기능이다. 이 기능은 메모리 누수를 디버그하거나 메모리 hogger를 찾는 데 사용할 수 있다. 페이지 할당이 발생하면 호출 스택 및 페이지의 order정보와 같은 할당 정보가 각 페이지의 특정 장소에 저장된다. 모든 페이지의 상태를 알아야 할 때 이 정보를 통해 분석 할 수 있다.
+
+Although we already have tracepoint for tracing page allocation/free, using it for analyzing who allocate each page is rather complex. We need to enlarge the trace buffer for preventing overlapping until userspace program launched. And, launched program continually dump out the trace buffer for later analysis and it would change system behviour with more possibility rather than just keeping it in memory, so bad for debugging.
+우리는 이미 페이지 할당/해제를 추적하는 tracepoint를 가지고 있지만 각 페이지를 할당하는 오너를 분석하기 위해 이를 사용하는 것은 다소 복잡하다. 사용자 공간 프로그램이 시작될 때까지 중복을 방지하기 위해 trace buffer를 확대해야 한다. 또한 실행 된 프로그램은 추후 분석을 위해 trace buffer를 계속해서 덤프하므로 메모리를 유지하는 것보다 디버깅에 좋지 않은 가능성으로 시스템 동작을 변경하다.
+
+page owner can also be used for various purposes. For example, accurate fragmentation statistics can be obtained through gfp flag information of each page. It is already implemented and activated if page owner is enabled. Other usages are more than welcome.
+페이지 오너는 다양한 용도로 사용될 수 있다. 예를 들어, 각 페이지의 gfp 플래그 정보를 통해 정확한 fragmentation 통계를 얻을 수 있다. 페이지 오너가 활성화 된 경우 이미 구현되고 활성화된다. 다른 용도로 사용하는 것도 환영한다.
+
+page owner is disabled in default. So, if you'd like to use it, you need to add "page_owner=on" into your boot cmdline. If the kernel is built with page owner and page owner is disabled in runtime due to no enabling boot option, runtime overhead is marginal. If disabled in runtime, it doesn't require memory to store owner information, so there is no runtime memory overhead. And, page owner inserts just two unlikely branches into the page allocator hotpath and if not enabled, then allocation is done like as the kernel without page owner. These two unlikely branches should not affect to allocation performance, especially if the static keys jump label patching functionality is available. Following is the kernel's code size change due to this facility.
+페이지 오너는 기본적으로 사용이 비활성화되어 있다. 따라서 페이지 오너를 사용하고 싶다면 "page_owner=on"을 부팅 파라미터에 추가해야 한다. 커널이 페이지 오너로 빌드되었지만 부트 파라미터로 활성화하지 않아서 페이지 오너가 비활성화되었을 때에는, 런타임 오버 헤드가 거의 없다. 런타임에 사용하지 않도록 설정하면 소유자 정보를 저장하는데 메모리가 필요하지 않으므로 런타임 메모리 오버 헤드가 없다. 그리고 페이지 오너는 페이지 할당 자 hotpath에 두 개의 가능성이 적은 브랜치를 삽입하고, 활성화되지 않은 경우 페이지 오너가 없는 커널처럼 할당을 수행한다. static keys jump labeal patching 기능을 사용할 수있는 경우 특히 이 두 가지가 할당 성능에 영향을 미치지 않는다. 다음은 이 기능으로 인한 커널의 코드 크기 변경을 나타낸다.
+
+- 페이지 오너가 없는 경우(Without page owner)
+   text    data     bss     dec     hex filename
+  40662    1493     644   42799    a72f mm/page_alloc.o
+
+- 페이지 오너가 있는 경우(With page owner)
+   text    data     bss     dec     hex filename
+  40892    1493     644   43029    a815 mm/page_alloc.o
+   1427      24       8    1459     5b3 mm/page_ext.o
+   2722      50       0    2772     ad4 mm/page_owner.o
+
+Although, roughly, 4 KB code is added in total, page_alloc.o increase by 230 bytes and only half of it is in hotpath. Building the kernel with page owner and turning it on if needed would be great option to debug kernel memory problem.
+대략 4KB 코드가 합계로 추가되지만, page_alloc.o는 230 바이트 씩 증가하며 그 중 절반만이 hotpath에 있다. 페이지 오너를 추가한 커널을 빌드하고 필요하다면 페이지 오너를 활성화하면 커널 메모리 문제를 디버깅하는 데 아주 좋다.
+
+There is one notice that is caused by implementation detail. page owner stores information into the memory from struct page extension. This memory is initialized some time later than that page allocator starts in sparse memory system, so, until initialization, many pages can be allocated and they would have no owner information. To fix it up, these early allocated pages are investigated and marked as allocated in initialization phase.  Although it doesn't mean that they have the right owner information, at least, we can tell whether the page is allocated or not, more accurately. On 2GB memory x86-64 VM box, 13343 early allocated pages are catched and marked, although they are mostly allocated from struct page extension feature. Anyway, after that, no page is left in un-tracking state.
+세부적인 구현으로 인해 알아야 할 것이 하나 있다. 페이지 오너는 struct page extension로부터 정보를 메모리에 저장한다. 이 메모리는 sparse 메모리 시스템에서 페이지 할당자보다 조금 늦게 초기화된다. 따라서 초기화될 때까지, 많은 페이지가 할당될 수 있으며 오너 정보가 없게 된다. 이를 해결하기 위해 초기 할당된 페이지를 조사하고 초기화 단계에서 할당 된 것으로 표시하다. 비록 페이지의 오너가 정확한지를 의미하지는 않지만 페이지가 할당되었는지 아닌지는 정확하게 알 수 있다. 2GB 메모리의 x86-64 VM 머신에서 13343개의 초기 할당 페이지는 주로 page extension 구조체에 할당되지만 어쨌든, 모든 페이지가 추적중인 상태가 됟나.
+
+* 사용법(Usage)
+
+1) 유저 헬퍼를 빌드하기(Build user-space helper)
+	cd tools/vm
+	make page_owner_sort
+
+2) 커널에서 페이지오너를 활성화하기(Enable page owner)
+	Add "page_owner=on" to boot cmdline.
+
+3) 디버깅하고 싶은 시나리오를 실행하기(Do the job what you want to debug)
+
+4) 페이지 오너 정보를 분석하기(Analyze information from page owner)
+	cat /sys/kernel/debug/page_owner > page_owner_full.txt
+	grep -v ^PFN page_owner_full.txt > page_owner.txt
+	./page_owner_sort page_owner.txt sorted_page_owner.txt
+
+	See the result about who allocated each page in the sorted_page_owner.txt.
+	sorted_page_owner.txt 에서 각 페이지를 누가 할당했는지에 대한 결과를 보자.

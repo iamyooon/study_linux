@@ -1,0 +1,39 @@
+===============================================================
+Softlockup detector and hardlockup detector (aka nmi_watchdog)
+===============================================================
+
+커널은 softlockup과 hardlockup을 감지하는 watchdog처럼 동작할 수 있다.
+The Linux kernel can act as a watchdog to detect both soft and hard lockups.
+
+'softlockup'은 다른 태스크에 실행할 기회를 주지 않고 커널이 20 초 이상 커널 모드로 동작하는 버그를 말한다.(자세한 내용은 아래 "구현"참조). current 태스크의  stacktrace는 lockup이 감지되면 출력되며, 기본적으로 시스템은 lockup상태로 유지된다. 또는 커널패닉을 트리거할 수 있다. 패닉을 활성화시키기 위해 sysctl인 "kernel.softlockup_panic" 이나 커널 파라미터 "softlockup_panic"(자세한 내용은 "Documentation/admin-guide/kernel-parameters.rst" 참조) 및 컴파일 옵션 "BOOTPARAM_SOFTLOCKUP_PANIC"이 제공된다.
+A 'softlockup' is defined as a bug that causes the kernel to loop in kernel mode for more than 20 seconds (see "Implementation" below for details), without giving other tasks a chance to run. The current stack trace is displayed upon detection and, by default, the system will stay locked up. Alternatively, the kernel can be configured to panic; a sysctl, "kernel.softlockup_panic", a kernel parameter, "softlockup_panic" (see "Documentation/admin-guide/kernel-parameters.rst" for details), and a compile option, "BOOTPARAM_SOFTLOCKUP_PANIC", are provided for this.
+
+'hardlockup'은 다른 인터럽트를 실행할 기회없이 CPU가 커널 모드에서 10 초 이상 동작하는 버그(자세한 내용은 아래 "구현"참조)를 말한다. softlockup의 경우와 마찬가지로, current태스크의 stacktrace는 lockup이 감지되면 출력되고, sysctl인 'hardlockup_panic', 컴파일 옵션 "BOOTPARAM_HARDLOCKUP_PANIC", 커널 파라미터인 "nmi_watchdog"을 통해 기본 동작이 변경되지 않는 한 시스템은 lockup 상태를 유지한다. (자세한 내용은 "Documentation/admin-guide/kernel-parameters.rst"참조).
+A 'hardlockup' is defined as a bug that causes the CPU to loop in kernel mode for more than 10 seconds (see "Implementation" below for details), without letting other interrupts have a chance to run.  Similarly to the softlockup case, the current stack trace is displayed upon detection and the system will stay locked up unless the default behavior is changed, which can be done through a sysctl, 'hardlockup_panic', a compile time knob, "BOOTPARAM_HARDLOCKUP_PANIC", and a kernel parameter, "nmi_watchdog" (see "Documentation/admin-guide/kernel-parameters.rst" for details).
+
+패닉 옵션은 panic_timeout (이 타임아웃은 혼동스러운 이름인 "kernel.panic"sysctl을 통해 설정 됨)과 함께 사용되어 지정된 시간 후에 시스템이 자동으로 재부팅되도록 한다.
+The panic option can be used in combination with panic_timeout (this timeout is set through the confusingly named "kernel.panic" sysctl), to cause the system to reboot automatically after a specified amount of time.
+
+Implementation
+==============
+
+softlockup 및 hardlockup 감지기는 각각 hrtimer 및 perf 하위 시스템 위에 구축된다. 원칙적으로 이 하위 시스템이 있는 아키텍처에서 작동해야 한다???????????
+The soft and hard lockup detectors are built on top of the hrtimer and perf subsystems, respectively. A direct consequence of this is that, in principle, they should work in any architecture where these subsystems are present.
+
+주기적인 hrtimer가 실행되어 인터럽트를 생성하고 watchdog 태스크을 시작한다. NMI perf 이벤트는 hardlockup을 확인하기 위해 "watchdog_thresh"(컴파일 타임은 10으로 초기화되고 같은 이름의 sysctl을 통해 구성 가능) 초마다 생성된다. 이 시간 동안 시스템의 CPU가 hrtimer 인터럽트를 수신하지 않으면 'hardlockup detector'(NMI perf 이벤트의 처리기)가 사용하는 커널설정에 따라 커널경고메세지를 출력하거나 패닉을 트리거한다.
+A periodic hrtimer runs to generate interrupts and kick the watchdog task. An NMI perf event is generated every "watchdog_thresh" (compile-time initialized to 10 and configurable through sysctl of the same name) seconds to check for hardlockups. If any CPU in the system does not receive any hrtimer interrupt during that time the 'hardlockup detector' (the handler for the NMI perf event) will generate a kernel warning or call panic, depending on the configuration.
+
+watchdog 태스크는 예약 될 때마다 타임 스탬프를 업데이트하는 우선 순위가 높은 커널 스레드입니다. 해당 타임 스탬프가 2 * watchdog_thresh 초 (softlockup 잠금 임계 값) 동안 업데이트되지 않으면 'softlockup detector'(hrtimer 콜백 함수 내부에 코딩 됨)가 유용한 디버그 정보를 시스템 로그에 덤프한다. 그런 다음 지시가있는 경우 패닉을 호출한다 다른 커널 코드의 실행을 재개하거나 재개하십시오.
+The watchdog task is a high priority kernel thread that updates a timestamp every time it is scheduled. If that timestamp is not updated for 2*watchdog_thresh seconds (the softlockup threshold) the 'softlockup detector' (coded inside the hrtimer callback function) will dump useful debug information to the system log, after which it will call panic if it was instructed to do so or resume execution of other kernel code.
+
+hrtimer의주기는 2 * watchdog_thresh / 5입니다. 즉, hardlockup 록업 감지기가 시작되기 전에 인터럽트를 생성하는 데 2 ~ 3 회 기회가 있음을 의미한다.
+The period of the hrtimer is 2*watchdog_thresh/5, which means it has two or three chances to generate an interrupt before the hardlockup detector kicks in.
+
+위에서 설명한대로 관리자가 hrtimer 및 perf 이벤트의 기간을 구성 할 수있는 커널 노브가 제공된다. 특정 환경에 적합한 값은 잠금 장치에 대한 빠른 응답과 검색 오버 헤드 사이의 균형입니다.
+As explained above, a kernel knob is provided that allows administrators to configure the period of the hrtimer and the perf event. The right value for a particular environment is a trade-off between fast response to lockups and detection overhead.
+
+기본적으로 watchdog은 모든 온라인 코어에서 실행된다. 그러나 NO_HZ_FULL로 구성된 커널에서 기본적으로 watchdog은 "nohz_full"부트 인수에 지정된 코어가 아닌 하우스 키핑 코어에서만 실행된다. "nohz_full"코어에서 watchdog이 기본적으로 실행되도록 허용 한 경우 스케줄러를 활성화하기 위해 타이머 틱을 실행해야한다. 그러면 "nohz_full"기능이 커널에서 해당 코어의 사용자 코드를 보호하지 못하게된다. 물론 nohz_full 코어에서 기본적으로 비활성화하면 해당 코어가 커널에 들어갈 때 기본적으로 잠겨 있는지 여부를 감지 할 수 없습니다. 그러나 watchdog이 하우스 키핑 (비 틱 성) 코어에서 계속 실행되도록 허용한다는 것은 해당 코어에서 계속 로크 업을 감지한다는 것을 의미한다.
+By default, the watchdog runs on all online cores.  However, on a kernel configured with NO_HZ_FULL, by default the watchdog runs only on the housekeeping cores, not the cores specified in the "nohz_full" boot argument.  If we allowed the watchdog to run by default on the "nohz_full" cores, we would have to run timer ticks to activate the scheduler, which would prevent the "nohz_full" functionality from protecting the user code on those cores from the kernel.  Of course, disabling it by default on the nohz_full cores means that when those cores do enter the kernel, by default we will not be able to detect if they lock up.  However, allowing the watchdog to continue to run on the housekeeping (non-tickless) cores means that we will continue to detect lockups properly on those cores.
+
+두 경우 모두 watchdog 실행에서 제외 된 코어 세트는 kernel.watchdog_cpumask sysctl을 통해 조정할 수 있다. nohz_full 코어의 경우 커널이 nohz_full 코어에 매달려있는 경우를 디버깅하는 데 유용 할 수 있다.
+In either case, the set of cores excluded from running the watchdog may be adjusted via the kernel.watchdog_cpumask sysctl.  For nohz_full cores, this may be useful for debugging a case where the kernel seems to be hanging on the nohz_full cores.

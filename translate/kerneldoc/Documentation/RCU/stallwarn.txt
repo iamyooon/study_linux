@@ -1,0 +1,169 @@
+Using RCU's CPU Stall Detector
+
+이 문서는 먼저 RCU의 CPU stall 디텍터가 어떤 종류의 문제를 찾을 수 있는지를 논의한 다음, 디텍터의 작동을 미세하게 조정하는 데 사용할 수있는 커널 매개 변수와 Kconfig 옵션에 대해 설명합니다. 마지막으로,이 문서는 stall 디텍터의 "splat"포맷에 대해 설명합니다.
+This document first discusses what sorts of issues RCU's CPU stall detector can locate, and then discusses kernel parameters and Kconfig options that can be used to fine-tune the detector's operation.  Finally, this document explains the stall detector's "splat" format.
+
+무엇이 RCU CPU stall warning을 유발하는가?
+What Causes RCU CPU Stall Warnings?
+
+커널이 RCU CPU stall warning를 출력했다. "원인은 무엇인가?" 라는 질문을 할 수 있다. 아래의 문제로 인해 RCU CPU stall warning로 이어질 수 있다.
+So your kernel printed an RCU CPU stall warning.  The next question is "What caused it?"  The following problems can result in RCU CPU stall warnings:
+
+o CPU가 RCU 읽기 측 임계 영역에서 반복중.
+o A CPU looping in an RCU read-side critical section.
+
+o CPU가 인터럽트를 사용하지 않고 반복중.
+o A CPU looping with interrupts disabled.
+
+o CPU가 선점이 비활성화하고 반복중. 이 조건은 RCU-sched stall로 이어질 수 있고 ksoftirqd가 사용 중이면 RCU-bh가 stall된다.
+o A CPU looping with preemption disabled. This condition can result in RCU-sched stalls and, if ksoftirqd is in use, RCU-bh stalls.
+
+o CPU가 바텀하프를 비활성화하고 반복중. 이 조건에서는 RCU-sched와 RCU-bh stall이 발생할 수 있다.
+o A CPU looping with bottom halves disabled.  This condition can result in RCU-sched and RCU-bh stalls.
+
+o CONFIG_PREEMPT를 비활성화한 커널의 경우, CPU가 schedule()을 호출하지 않고 반복중. cond_resched()가 반드시 RCU CPU stall warning를 방지하지는 않는다. 따라서 커널 루핑이 실제로 예상되고 바람직한 동작인 경우 cond_resched() 호출 중 일부를 cond_resched_rcu_qs() 호출로 바꿔야 할 수도 있다.
+o For !CONFIG_PREEMPT kernels, a CPU looping anywhere in the kernel without invoking schedule().  Note that cond_resched() does not necessarily prevent RCU CPU stall warnings.  Therefore, if the looping in the kernel is really expected and desirable behavior, you might need to replace some of the cond_resched() calls with calls to cond_resched_rcu_qs().
+
+부팅중에 출력되는 콘솔메세지 출력빈도를 따라가기엔 너무 느린 컨솔연결을 사용하는 리눅스를 부팅중인 경우. 예를 들어, 115Kbaud 직렬 콘솔은 부팅시 메시지 속도를 따라 잡기에는 너무 느려서 자주 RCU CPU stall warning 메시지가 발생한다. 특히 debug printk()를 추가 한 경우.
+o Booting Linux using a console connection that is too slow to keep up with the boot-time console-message rate.  For example, a 115Kbaud serial console can be -way- too slow to keep up with boot-time message rates, and will frequently result in RCU CPU stall warning messages.  Especially if you have added debug printk()s.
+
+o RCU의 grace-period kthread가 동작하는 것을 막는 모든 것. 이로 인해 "All QSes seen" 콘솔 로그 메시지가 발생할 수 있다. 이 메시지에는 kthread가 마지막으로 실행 된 시간과 실행 빈도에 대한 정보가 포함된다.
+o Anything that prevents RCU's grace-period kthreads from running.  This can result in the "All QSes seen" console-log message.  This message will include information on when the kthread last ran and how often it should be expected to run.
+
+o CONFIG_PREEMPT를 활성화한 커널에서 CPU 바운드 작업을 수행중인 RT 태스크.  RCU 읽기 측 임계 영역의 중간에 있는 우선 순위가 낮은 작업을 선점 할 수 있다. 우선 순위가 낮은 작업이 다른 CPU에서 실행되도록 허용되지 않은 경우 특히 위험하다. 이 경우 다음 RCU grace-period가 완료 될 수 없으므로 시스템의 메모리가 부족해 중단 될 수 있다. 시스템이 메모리 부족 상태에서 실행되는 동안 stall warning 메시지가 표시 될 수 있다.
+o A CPU-bound real-time task in a CONFIG_PREEMPT kernel, which might happen to preempt a low-priority task in the middle of an RCU read-side critical section.   This is especially damaging if that low-priority task is not permitted to run on any other CPU, in which case the next RCU grace period can never complete, which will eventually cause the system to run out of memory and hang.  While the system is in the process of running itself out of memory, you might see stall-warning messages.
+
+o CONFIG_PREEMPT_RT가 활성화된 커널에서의 RCU softirq 스레드보다 높은 우선 순위로 실행중인 CPU 바인딩 된 RT 태스크. 이 경우에는 RCU 콜백이 호출되지 않고 CONFIG_PREEMPT_RCU 커널에서 RCU grace period이 더 이상 완료되지 않는다. 어쨌든 시스템은 결국 메모리가 부족 해지고 끊어질 것이다. CONFIG_PREEMPT_RCU의 경우 stall warning 메시지가 표시 될 수 있다.
+o A CPU-bound real-time task in a CONFIG_PREEMPT_RT kernel that is running at a higher priority than the RCU softirq threads.  This will prevent RCU callbacks from ever being invoked, and in a CONFIG_PREEMPT_RCU kernel will further prevent RCU grace periods from ever completing.  Either way, the system will eventually run out of memory and hang.  In the CONFIG_PREEMPT_RCU case, you might see stall-warning messages.
+
+o HW 또는 SW 문제로 인해 dyntick-idle 모드에 있지 않은 CPU의 스케줄러 클럭 인터럽트가 차단된다. 이 문제는 실제로 발생했으며 CONFIG_NO_HZ_COMMON를 사용하지 않는 커널에서 RCU CPU stall warning가 발생할 가능성이 높다.
+o A hardware or software issue shuts off the scheduler-clock interrupt on a CPU that is not in dyntick-idle mode.  This problem really has happened, and seems to be most likely to result in RCU CPU stall warnings for CONFIG_NO_HZ_COMMON=n kernels.
+
+o RCU 구현의 버그.
+o A bug in the RCU implementation.
+
+o 하드웨어 장애. 이것은 거의 발생하지 않지만 실생활에서는 적어도 한 번 이상 발생한다. 동작중인 시스템에서 CPU가 실패하여 응답이 없지만 즉시 시스템이 crash되지는 않는다. 이로 인해 일련의 RCU CPU stall warning이 발생하여 결국 CPU가 실패했다는 사실을 알게된다.
+o A hardware failure.  This is quite unlikely, but has occurred at least once in real life.  A CPU failed in a running system, becoming unresponsive, but not causing an immediate crash.  This resulted in a series of RCU CPU stall warnings, eventually leading the realization that the CPU had failed.
+
+RCU, RCU-sched, RCU-bh 및 RCU-tasks 구현에는 CPU stall warning이 있다. SRCU에는 CPU stall warning이 없다. RCU는 grace period에 있을 때만 CPU stall을 감지한다. grace period 없을 때에는 CPU stall warning이 발생하지 않는다.
+The RCU, RCU-sched, RCU-bh, and RCU-tasks implementations have CPU stall warning.  Note that SRCU does -not- have CPU stall warnings.  Please note that RCU only detects CPU stalls when there is a grace period in progress.  No grace period, no CPU stall warnings.
+
+stall의 원인을 찾으려면 stack trace를 체크해야 한다. 문제가 되는 함수는 일반적으로 콜스택의 맨 위에 있다. single extended stall에서 여러개의 stall warning가 나온다면 stack trace를 비교하는 것은 종종 stall이 어디에서 일어나고 있는지를 판단하는 데 도움을 줄 수 있다. which will usually be in the function nearest the top of that portion of the stack which remains the same from trace to trace. 확실하게 stall을 재현할 수 있다면 ftrace가 상당히 도움이 될 수 있다.
+To diagnose the cause of the stall, inspect the stack traces.  The offending function will usually be near the top of the stack.  If you have a series of stall warnings from a single extended stall, comparing the stack traces can often help determine where the stall is occurring, which will usually be in the function nearest the top of that portion of the stack which remains the same from trace to trace.  If you can reliably trigger the stall, ftrace can be quite helpful.
+
+RCU 버그는 CONFIG_RCU_TRACE 및 RCU의 event tracing을 사용하여 디버깅 할 수 있다. RCU의 event tracing에 대한 정보는 include/trace/events/rcu.h를 참조하면 된다.
+RCU bugs can often be debugged with the help of CONFIG_RCU_TRACE and with RCU's event tracing.  For information on RCU's event tracing, see include/trace/events/rcu.h.
+
+RCU CPU stall 감지 설비 최적화하기
+Fine-Tuning the RCU CPU Stall Detector
+
+rcuupdate.rcu_cpu_stall_suppress 모듈 매개 변수는 RCU grace period을 지나치게 지연시키는 조건을 감지하는 RCU의 CPU stall detector를 비활성화한다. 이 모듈 매개 변수는 기본적으로 CPU stall 감지를 활성화하지만 부팅파라미터를 통해 또는 런타임시 sysfs를 통해 바꿀 수 있다. stall detector's idead of what constitutes "unduly delayed"는 커널 설정 변수와 cpp 매크로에 의해 제어된다.
+The rcuupdate.rcu_cpu_stall_suppress module parameter disables RCU's CPU stall detector, which detects conditions that unduly delay RCU grace periods.  This module parameter enables CPU stall detection by default, but may be overridden via boot-time parameter or at runtime via sysfs.  The stall detector's idea of what constitutes "unduly delayed" is controlled by a set of kernel configuration variables and cpp macros:
+
+CONFIG_RCU_CPU_STALL_TIMEOUT
+
+이 커널 구성 매개 변수는 RCU가 grace period 시작부터 RCU CPU stall warning를 발행할 때까지 기다리는 시간을 정한다. 이 시간 값은 일반적으로 21초다.
+This kernel configuration parameter defines the period of time that RCU will wait from the beginning of a grace period until it issues an RCU CPU stall warning.  This time period is normally 21 seconds.
+
+
+이 파라미터는 /sys/module/rcupdate/parameters/rcu_cpu_stall_timeout을 통해 런타임에 변경할 수 있지만 이 값은 주기의 시작시에만 점검된다. 따라서 40 초의 정지 시간이 10 초인 경우 sysfs 매개 변수를 5로 설정하면 -next-stall의 시간 초과 또는 현재의 정지에 대한 다음 경고가 단축됩니다 (정지가 충분히 길다고 가정 할 때). 현재의 stall에 대한 다음 경고의 타이밍에는 영향을 미치지 않습니다.
+This configuration parameter may be changed at runtime via the /sys/module/rcupdate/parameters/rcu_cpu_stall_timeout, however this parameter is checked only at the beginning of a cycle.  So if you are 10 seconds into a 40-second stall, setting this sysfs parameter to (say) five will shorten the timeout for the -next- stall, or the following warning for the current stall (assuming the stall lasts long enough).  It will not affect the timing of the next warning for the current stall.
+
+
+stall warning 메시지는 / sys / module / rcupdate / parameters / rcu_cpu_stall_suppress를 통해 완전히 활성화 및 비활성화 될 수 있습니다.
+Stall-warning messages may be enabled and disabled completely via /sys/module/rcupdate/parameters/rcu_cpu_stall_suppress.
+
+RCU_STALL_DELAY_DELTA
+
+Although the lockdep facility is extremely useful, it does add some overhead.  Therefore, under CONFIG_PROVE_RCU, the RCU_STALL_DELAY_DELTA macro allows five extra seconds before giving an RCU CPU stall warning message.  (This is a cpp macro, not a kernel configuration parameter.)
+
+RCU_STALL_RAT_DELAY
+
+The CPU stall detector tries to make the offending CPU print its own warnings, as this often gives better-quality stack traces.  However, if the offending CPU does not detect its own stall in the number of jiffies specified by RCU_STALL_RAT_DELAY, then some other CPU will complain.  This delay is normally set to two jiffies.  (This is a cpp macro, not a kernel configuration parameter.)
+
+rcupdate.rcu_task_stall_timeout
+
+이 boot / sysfs 매개 변수는 RCU-tasks stall 경고 간격을 제어합니다. 0 이하의 값은 RCU-tasks stall warnings을 억제합니다. 양수 값은 stall warning 간격을 jiffies로 설정합니다. RCU-tasks stall 경고는 다음 행으로 시작됩니다.
+This boot/sysfs parameter controls the RCU-tasks stall warning interval.  A value of zero or less suppresses RCU-tasks stall warnings.  A positive value sets the stall-warning interval in jiffies.  An RCU-tasks stall warning starts with the line:
+
+정보 : 작업에 rcu_tasks 감지 된 stall :
+INFO: rcu_tasks detected stalls on tasks:
+
+현재 RCU- 태스크 grace period을 지연시키는 각 태스크에 대해 sched_show_task ()의 출력을 계속합니다.
+And continues with the output of sched_show_task() for each task stalling the current RCU-tasks grace period.
+
+Interpreting RCU's CPU Stall-Detector "Splats"
+
+RCU가 아닌 타스크의 경우, CPU가 stall 중임을 감지하면 다음과 유사한 메시지가 인쇄됩니다.
+For non-RCU-tasks flavors of RCU, when a CPU detects that it is stalling, it will print a message similar to the following:
+
+INFO: rcu_sched_state detected stall on CPU 5 (t=2500 jiffies)
+
+이 메시지는 CPU 5가 stall을 일으키고 stall이 RCU 스케 일에 영향을 미치고 있음을 감지했습니다. 이 메시지는 일반적으로 문제가되는 CPU의 스택 덤프가옵니다. TREE_RCU 커널 빌드에 PREEMPT_RCU 커널 빌드에, RCU 대신 rcu_preempt_state에 의해 구현되는 동안, RCU 및 RCU-예정 :은, 동일한 기본 메커니즘에 의해 구현된다.
+This message indicates that CPU 5 detected that it was causing a stall, and that the stall was affecting RCU-sched.  This message will normally be followed by a stack dump of the offending CPU.  On TREE_RCU kernel builds, RCU and RCU-sched are implemented by the same underlying mechanism, while on PREEMPT_RCU kernel builds, RCU is instead implemented by rcu_preempt_state.
+
+다른 한편으로 문제가되는 CPU가 stall warning 메시지를 신속하게 출력하지 못하면 다른 CPU가 다음과 유사한 메시지를 인쇄합니다.
+On the other hand, if the offending CPU fails to print out a stall-warning message quickly enough, some other CPU will print a message similar to the following:
+
+INFO: rcu_bh_state detected stalls on CPUs/tasks: { 3 5 } (detected by 2, 2502 jiffies)
+
+이 메시지는 CPU 2가 CPU 3과 5가 모두 stall을 일으키고 stall이 RCU-bh에 영향을 미치고 있음을 감지했습니다. 이 메시지는 일반적으로 각 CPU에 대해 스택 덤프가옵니다. PREEMPT_RCU 빌드는 CPU는 물론 작업에 의해 지연 될 수 있으며 작업은 PID (예 : "P3421")로 표시됩니다. rcu_preempt_state stall이 CPU 및 태스크 둘 다에 의해 발생할 수도 있습니다.이 경우 CPU 및 태스크가 모두 목록에서 호출됩니다.
+This message indicates that CPU 2 detected that CPUs 3 and 5 were both causing stalls, and that the stall was affecting RCU-bh.  This message will normally be followed by stack dumps for each CPU.  Please note that PREEMPT_RCU builds can be stalled by tasks as well as by CPUs, and that the tasks will be indicated by PID, for example, "P3421".  It is even possible for a rcu_preempt_state stall to be caused by both CPUs -and- tasks, in which case the offending CPUs and tasks will all be called out in the list.
+
+마지막으로, stall warning가 인쇄를 시작하는 것처럼 grace period이 끝나면 허위 stall warning 메시지가 나타납니다.
+Finally, if the grace period ends just as the stall warning starts printing, there will be a spurious stall-warning message:
+
+INFO: rcu_bh_state detected stalls on CPUs/tasks: { } (detected by 4, 2502 jiffies)
+
+이것은 드문 일이지만 실제 생활에서는 때때로 발생합니다. 이 경우 stall warning와 grace period 초기화가 어떻게 상호 작용하는지에 따라 제로 - 지피 stall이 표시 될 수 있습니다. 이런 종류의 문제에 대해 과도하게 작용하는 stop_machine ()과 같은 것에 의지하지 않고 이러한 가양 성을 완전히 없애는 것은 불가능합니다.
+This is rare, but does happen from time to time in real life.  It is also possible for a zero-jiffy stall to be flagged in this case, depending on how the stall warning and the grace-period initialization happen to interact.  Please note that it is not possible to entirely eliminate this sort of false positive without resorting to things like stop_machine(), which is overkill for this sort of problem.
+
+Recent kernels will print a long form of the stall-warning message:
+
+INFO: rcu_preempt detected stall on CPU 0: (63959 ticks this GP) idle=241/3fffffffffffffff/0 softirq=82/543 (t=65000 jiffies)
+
+In kernels with CONFIG_RCU_FAST_NO_HZ, more information is printed:
+
+INFO: rcu_preempt detected stall on CPU 0: (64628 ticks this GP) idle=dd5/3fffffffffffffff/0 softirq=82/543 last_accelerate: a345/d342 nonlazy_posted: 25 .D (t=65000 jiffies)
+
+"(64628 tick this GP)"는이 CPU가 현재 정지 된 grace period 동안 64,000 개가 넘는 스케줄링 클럭 인터럽트를 수행했음을 나타냅니다. CPU가 현재 grace period (예 : 오프라인 상태 인 경우)을 아직 모르는 경우 메시지의이 부분은 CPU 뒤의 grace period을 나타냅니다.
+The "(64628 ticks this GP)" indicates that this CPU has taken more than 64,000 scheduling-clock interrupts during the current stalled grace period.  If the CPU was not yet aware of the current grace period (for example, if it was offline), then this part of the message indicates how many grace periods behind the CPU is.
+
+메시지의 "idle ="부분은 dyntick-idle 상태를 출력합니다. 첫 번째 "/"앞에 오는 16 진수는 dynticks 카운터의 하위 12 비트이며, CPU가 dyntick-idle 모드에 있으면 짝수 값을, 그렇지 않으면 홀수 값을 갖습니다. 두 개의 "/"사이의 16 진수는 중첩의 값이며, 이는 유휴 루프에있는 경우 작은 양수가되고 그렇지 않은 경우에는 매우 큰 양수가됩니다 (위 그림 참조).
+The "idle=" portion of the message prints the dyntick-idle state.  The hex number before the first "/" is the low-order 12 bits of the dynticks counter, which will have an even-numbered value if the CPU is in dyntick-idle mode and an odd-numbered value otherwise.  The hex number between the two "/"s is the value of the nesting, which will be a small positive number if in the idle loop and a very large positive number (as shown above) otherwise.
+
+메시지의 "softirq ="부분은 정지 된 CPU가 실행 한 RCU softirq 처리기의 수를 추적합니다. "/"앞에있는 숫자는이 CPU가 현재 (정지 된) grace period 일 수있는 grace period의 시작을 마지막으로 기록한 시점에서 부팅 한 이후에 실행 된 번호이거나 이전 grace period 일 수 있습니다 예를 들어, CPU가 확장 된 시간 동안 dyntick-idle 모드에 있었을 경우 "/"다음의 숫자는 현재 시간까지 부팅 한 이후에 실행 된 번호입니다.이 후자의 숫자가 반복 된 정지 기간 동안 일정하게 유지되면, 경고 메시지를 보내면 RCU의 softirq 처리기가 더 이상이 CPU에서 실행될 수없는 것일 수 있습니다. 중단 된 CPU가 인터럽트를 사용하여 작동하지 않는 경우 또는 -rt 커널에서 우선 순위가 높은 프로세스가 RCU softirq 핸들러.
+The "softirq=" portion of the message tracks the number of RCU softirq handlers that the stalled CPU has executed.  The number before the "/" is the number that had executed since boot at the time that this CPU last noted the beginning of a grace period, which might be the current (stalled) grace period, or it might be some earlier grace period (for example, if the CPU might have been in dyntick-idle mode for an extended time period.  The number after the "/" is the number that have executed since boot until the current time.  If this latter number stays constant across repeated stall-warning messages, it is possible that RCU's softirq handlers are no longer able to execute on this CPU.  This can happen if the stalled CPU is spinning with interrupts are disabled, or, in -rt kernels, if a high-priority process is starving RCU's softirq handler.
+
+CONFIG_RCU_FAST_NO_HZ 커널의 경우 "last_accelerate :"는이 CPU가 rcu_needs_cpu ()에서 rcu_try_advance_all_cbs ()를 호출하거나 rcu_prepare_for_idle ()에서 마지막으로 rcu_accelerate_cbs ()를 호출했을 때 jiffies 카운터의 하위 16 비트를 인쇄합니다. "nonlazy_posted :"는 rcu_needs_cpu ()에 대한 마지막 호출 이후 게시 된 비 지연 호출 수를 인쇄합니다. 마지막으로 "L"은 현재 지연없는 콜백이 없다는 것을 나타내며 ( "."은 위에 표시된 것처럼 다르게 인쇄 됨) "D"는 dyntick-idle 처리가 활성화되었음을 나타냅니다 ( "."는 다르게 인쇄됩니다. , "nohz ="커널 부팅 매개 변수를 통해 비활성화 된 경우).
+For CONFIG_RCU_FAST_NO_HZ kernels, the "last_accelerate:" prints the low-order 16 bits (in hex) of the jiffies counter when this CPU last invoked rcu_try_advance_all_cbs() from rcu_needs_cpu() or last invoked rcu_accelerate_cbs() from rcu_prepare_for_idle().  The "nonlazy_posted:" prints the number of non-lazy callbacks posted since the last call to rcu_needs_cpu().  Finally, an "L" indicates that there are currently no non-lazy callbacks ("." is printed otherwise, as shown above) and "D" indicates that dyntick-idle processing is enabled ("." is printed otherwise, for example, if disabled via the "nohz=" kernel boot parameter).
+
+관련 grace period kthread가 stall warning보다 먼저 실행할 수없는 경우 다음 추가 행이 인쇄됩니다.
+If the relevant grace-period kthread has been unable to run prior to the stall warning, the following additional line is printed:
+
+rcu_preempt kthread는 2023의 jiffies를 위해 굶주 렸습니다!
+rcu_preempt kthread starved for 2023 jiffies!
+
+grace period kthreads CPU 시간의 굶주림은 물론 모든 CPU 및 작업이 필요한 정지 상태를 통과 한 경우에도 RCU CPU stall warning를 초래할 수 있습니다.
+
+Starving the grace-period kthreads of CPU time can of course result in RCU CPU stall warnings even when all CPUs and tasks have passed through the required quiescent states.
+
+한 마구간에서 여러 번 경고
+Multiple Warnings From One Stall
+
+stall이 충분히 오래 지속되면, stall warning 메시지가 여러 장 인쇄됩니다. 두 번째 및 후속 메시지는 더 긴 간격으로 인쇄되므로 첫 번째 메시지와 두 번째 메시지 사이의 시간은 stall 시작과 첫 번째 메시지 사이의 간격의 약 3 배가됩니다.
+If a stall lasts long enough, multiple stall-warning messages will be printed for it.  The second and subsequent messages are printed at longer intervals, so that the time between (say) the first and second message will be about three times the interval between the beginning of the stall and the first message.
+
+급한 grace period에 대한 stall warning
+Stall Warnings for Expedited Grace Periods
+
+긴급 grace period에 stall이 감지되면 dmesg에 다음과 같은 메시지가 표시됩니다.
+If an expedited grace period detects a stall, it will place a message like the following in dmesg:
+
+INFO: rcu_sched detected expedited stalls on CPUs: { 1 2 6 } 26009 jiffies s: 1043
+
+이것은 CPU 1, 2 및 6이 IPI 스케줄 변경에 응답하지 못했고, 신속한 grace period이 26,009 회였으며 급료 grace period 시퀀스 카운터가 1043임을 나타냅니다.이 마지막 값 홀수 일 경우 신속한 grace period이 종료되었음을 나타냅니다.
+This indicates that CPUs 1, 2, and 6 have failed to respond to a reschedule IPI, that the expedited grace period has been going on for 26,009 jiffies, and that the expedited grace-period sequence counter is 1043.  The fact that this last value is odd indicates that an expedited grace period is in flight.
+
+같은 실행에서 거의 같은 시간에 평상시와 신속한 grace period에 대한 stall warning를 보는 것이 전적으로 가능합니다.
+It is entirely possible to see stall warnings from normal and from expedited grace periods at about the same time from the same run.
