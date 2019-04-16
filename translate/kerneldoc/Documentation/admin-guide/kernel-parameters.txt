@@ -4132,28 +4132,41 @@
 
 	trace_buf_size=nn[KMG]
 			[FTRACE] will set tracing buffer size on each cpu.
+			각 cpu의 tracing buffer의 크기를 killo,mega,giga단위로
+			설정할 수 있다.
 
 	trace_event=[event-list]
 			[FTRACE] Set and start specified trace events in order
 			to facilitate early boot debugging. The event-list is a
 			comma separated list of trace events to enable. See
 			also Documentation/trace/events.txt
+			early boot 디버깅을 위해 특정 trace event를 명시할 수 잇다.
+			event-list는 활성화할 이벤트를 쉼표로 나열된 리스트이다.
+			Documentation/trace/events.txt에서도 해당 내용을 볼 수 있다.
 
 	trace_options=[option-list]
 			[FTRACE] Enable or disable tracer options at boot.
 			The option-list is a comma delimited list of options
 			that can be enabled or disabled just as if you were
 			to echo the option name into
+			부팅타임에 option-list에 나열된 tracer 옵션을 활성화 혹은
+			비활성화 한다. option-list는 쉼표로 구분된 옵션의 리스트이다.
+			아래 파일에 tracer 이름을 echo하는 것만으로도 활성화/비활성화할 수 있다.
 
 			    /sys/kernel/debug/tracing/trace_options
 
 			For example, to enable stacktrace option (to dump the
 			stack trace of each event), add to the command line:
+			예를 들어, stacktrace 옵션을 활성화하기 위해, 아래와 같이
+			command line에 추가하면 된다.(각 이벤트의 stack trace를
+			dump 하기 위해)
 
 			      trace_options=stacktrace
 
 			See also Documentation/trace/ftrace.txt "trace options"
 			section.
+			Documentation/trace/ftrace.tx의 trace options 섹션에서도
+			해당 내용을 볼 수 있다.
 
 	tp_printk[FTRACE]
 			Have the tracepoints sent to printk as well as the
@@ -4161,17 +4174,31 @@
 			where the system hangs or reboots and does not give the
 			option for reading the tracing buffer or performing a
 			ftrace_dump_on_oops.
+			tracepoints를 tracing ring buffer 뿐만 아니라 printk buffer
+			에도 보낸다. 시스템이 early bootup때 hang되거나 reboot되는 경우,
+			tracing buffer를 읽을 기회가 없거나 ftrace_dump_on_oops를 수행할
+			수 없을때 유용하다.
 
 			To turn off having tracepoints sent to printk,
 			 echo 0 > /proc/sys/kernel/tracepoint_printk
 			Note, echoing 1 into this file without the
 			tracepoint_printk kernel cmdline option has no effect.
+			tracepoint를 printk에 보내는것을 비활성화하기 위해서는
+			아래와 같이 하면 된다.
+
+			 echo 0 > /proc/sys/kernel/tracepoint_printk
+
+			주의하자, tracepoint_printk 없이 echo 1을 이 파일에 하는 것은
+			효과가 없다.
 
 			** CAUTION **
 
 			Having tracepoints sent to printk() and activating high
 			frequency tracepoints such as irq or sched, can cause
 			the system to live lock.
+			tracepoint를 printk()에 보내도록 활성화하고 잦은 빈도로
+			tracepoint를 활성화하는 irq,sched 같은 경우, 시스템을
+			라이브락에 빠지게 한다.
 
 	traceoff_on_warning
 			[FTRACE] enable this option to disable tracing when a
