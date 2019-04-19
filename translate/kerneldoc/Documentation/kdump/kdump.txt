@@ -1,212 +1,199 @@
 ================================================================
 Documentation for Kdump - The kexec-based Crash Dumping Solution
+kexec 기반의 시스템 크래시상황을 덤프하는 솔루션
 ================================================================
 
-This document includes overview, setup and installation, and analysis
-information.
+This document includes overview, setup and installation, and analysis information.
+이 문서는 kdump에 대한 overview, 설정,설치 그리고 분석정보를 포함하고 있다.
 
 Overview
 ========
 
-Kdump uses kexec to quickly boot to a dump-capture kernel whenever a
-dump of the system kernel's memory needs to be taken (for example, when
-the system panics). The system kernel's memory image is preserved across
-the reboot and is accessible to the dump-capture kernel.
+Kdump uses kexec to quickly boot to a dump-capture kernel whenever a dump of the system kernel's memory needs to be taken (for example, when the system panics). The system kernel's memory image is preserved across the reboot and is accessible to the dump-capture kernel.
+시스템커널의 메모리영역을 dump하길 원할 때(예를 들어, 시스템패닉시)마다 kdump는 kexec를 사용해서 빠르게 dump-capture  커널로 부팅한다. 시스템커널의 메모리이미지는 리붓후에도 보호되며 dump-capture 커널에 의해 접근가능하다.
 
-You can use common commands, such as cp and scp, to copy the
-memory image to a dump file on the local disk, or across the network to
-a remote system.
+You can use common commands, such as cp and scp, to copy the memory image to a dump file on the local disk, or across the network to a remote system.
+cp,scp 등의 일반적인 명령어를 사용해서 메모리이미지를 디스크나 네트워크에 연결된 리모트시스템에 복사할 수 있다.
 
-Kdump and kexec are currently supported on the x86, x86_64, ppc64, ia64,
-s390x, arm and arm64 architectures.
+Kdump and kexec are currently supported on the x86, x86_64, ppc64, ia64, s390x, arm and arm64 architectures.
+Kdump 및 kexec은 현재 x86, x86_64, ppc64, ia64, s390x, arm 및 arm64 아키텍처에서 지원된다.
 
-When the system kernel boots, it reserves a small section of memory for
-the dump-capture kernel. This ensures that ongoing Direct Memory Access
-(DMA) from the system kernel does not corrupt the dump-capture kernel.
-The kexec -p command loads the dump-capture kernel into this reserved
-memory.
+When the system kernel boots, it reserves a small section of memory for the dump-capture kernel. This ensures that ongoing Direct Memory Access (DMA) from the system kernel does not corrupt the dump-capture kernel.  The kexec -p command loads the dump-capture kernel into this reserved memory.
+system 커널이 부팅할 때 커널은 dump-capture 커널을 위한 작은 메모리 영역을 예약한다. 이렇게 하면 system 커널의 DMA(Direct Memory Access)가 dump-capture 커널을 손상시키지 않다. kexec -p 명령은 dump-capture 커널을 예약된 메모리로 로드한다.
 
-On x86 machines, the first 640 KB of physical memory is needed to boot,
-regardless of where the kernel loads. Therefore, kexec backs up this
-region just before rebooting into the dump-capture kernel.
+On x86 machines, the first 640 KB of physical memory is needed to boot, regardless of where the kernel loads. Therefore, kexec backs up this region just before rebooting into the dump-capture kernel.
+x86 시스템에서는 커널이 로드되는 위치에 관계없이 부팅하려면 물리적 메모리의 처음 640KB가 필요한다. 따라서 kexec은 dump-capture 커널로 재부팅하기 직전에 이 영역을 백업한다.
 
-Similarly on PPC64 machines first 32KB of physical memory is needed for
-booting regardless of where the kernel is loaded and to support 64K page
-size kexec backs up the first 64KB memory.
+Similarly on PPC64 machines first 32KB of physical memory is needed for booting regardless of where the kernel is loaded and to support 64K page size kexec backs up the first 64KB memory.
+마찬가지로 PPC64 시스템의 경우 커널이 로드되는 위치에 관계없이 부팅을 위해 처음 32KB의 물리적 메모리가 필요하며 64KB 페이지 크기를 지원하기 위해 kexec은 물리 메모리의 첫 64KB를 백업한다.
 
-For s390x, when kdump is triggered, the crashkernel region is exchanged
-with the region [0, crashkernel region size] and then the kdump kernel
-runs in [0, crashkernel region size]. Therefore no relocatable kernel is
-needed for s390x.
+For s390x, when kdump is triggered, the crashkernel region is exchanged with the region [0, crashkernel region size] and then the kdump kernel runs in [0, crashkernel region size]. Therefore no relocatable kernel is needed for s390x.
+s390x의 경우 kdump가 트리거되면 crashkernel 영역은 [0, crashkernel 영역 크기] 영역으로 바뀌고 kdump 커널은 [0, crashkernel 영역 크기]로 실행된다. 따라서 s390x에는 변동 가능 커널이 필요하지 않다.
 
-All of the necessary information about the system kernel's core image is
-encoded in the ELF format, and stored in a reserved area of memory
-before a crash. The physical address of the start of the ELF header is
-passed to the dump-capture kernel through the elfcorehdr= boot
-parameter. Optionally the size of the ELF header can also be passed
-when using the elfcorehdr=[size[KMG]@]offset[KMG] syntax.
+All of the necessary information about the system kernel's core image is encoded in the ELF format, and stored in a reserved area of memory before a crash. The physical address of the start of the ELF header is passed to the dump-capture kernel through the elfcorehdr= boot parameter. Optionally the size of the ELF header can also be passed when using the elfcorehdr=[size[KMG]@]offset[KMG] syntax.
+system 커널의 core image에 대한 모든 필요한 정보는 ELF 형식으로 인코딩되며 crash 발생전에 미리 지정된 영역에 저장된다. ELF 헤더 시작의 실제 주소는 elfcorehdr= 부트파라미터를 통해 dump-capture 커널로 전달된다. 선택적으로 elfcorehdr=[size[KMG]@]offset[KMG] 구문을 사용할 때 ELF 헤더의 크기를 전달할 수도 있다.
 
-
-With the dump-capture kernel, you can access the memory image through
-/proc/vmcore. This exports the dump as an ELF-format file that you can
-write out using file copy commands such as cp or scp. Further, you can
-use analysis tools such as the GNU Debugger (GDB) and the Crash tool to
-debug the dump file. This method ensures that the dump pages are correctly
-ordered.
-
+With the dump-capture kernel, you can access the memory image through /proc/vmcore. This exports the dump as an ELF-format file that you can write out using file copy commands such as cp or scp. Further, you can use analysis tools such as the GNU Debugger (GDB) and the Crash tool to debug the dump file. This method ensures that the dump pages are correctly ordered.
+dump-capture 커널을 사용하면 /proc/vmcore를 통해 메모리 이미지에 액세스 할 수 있다. 이렇게 하면 덤프가 cp 또는 scp와 같은 파일 복사 명령을 사용하여 ELF 형식 파일로 내보낸다. 또한 GNU 디버거 (GDB) 및 크래시 도구와 같은 분석 도구를 사용하여 덤프 파일을 디버깅 할 수 있다. 이 방법은  덤프 페이지가 올바르게 정렬되도록한다???
 
 Setup and Installation
+설정 및 설치 방법
 ======================
 
 Install kexec-tools
+kexec-tools 설치방법
 -------------------
 
 1) Login as the root user.
+1) root user로 로그인한다.
 
 2) Download the kexec-tools user-space package from the following URL:
+kexec-tools 유저프로그램 패키지를 아래 url에서 다운로드한다.
 
 http://kernel.org/pub/linux/utils/kernel/kexec/kexec-tools.tar.gz
 
 This is a symlink to the latest version.
+위 파일은 최신 버전에 대한 심볼릭링크다.
 
 The latest kexec-tools git tree is available at:
+최신 kexec-tools git tree는 아래에서 확인할 수 있다.
 
 git://git.kernel.org/pub/scm/utils/kernel/kexec/kexec-tools.git
 and
 http://www.kernel.org/pub/scm/utils/kernel/kexec/kexec-tools.git
 
 There is also a gitweb interface available at
+아래는 사용가능한 gitweb 주소이다.
+
 http://www.kernel.org/git/?p=utils/kernel/kexec/kexec-tools.git
 
 More information about kexec-tools can be found at
+kexec-tools에 대한 더 많은 정보는 아래에서 찾을 수 있다.
+
 http://horms.net/projects/kexec/
 
 3) Unpack the tarball with the tar command, as follows:
+3) tarball 파일을 tar 명령어를 이용해서 아래와 같이 압축해제한다.
 
    tar xvpzf kexec-tools.tar.gz
 
 4) Change to the kexec-tools directory, as follows:
+4) kexec-tools 디렉토리로 들어간다.
 
    cd kexec-tools-VERSION
 
 5) Configure the package, as follows:
+5) 패키지를 configure한다.
 
    ./configure
 
 6) Compile the package, as follows:
+6) 패키지를 컴파일한다.
 
    make
 
 7) Install the package, as follows:
+7) 패키지를 시스템에 인스톨한다.
 
    make install
 
 
 Build the system and dump-capture kernels
+system 커널과 dump-capture 커널의 빌드방법
 -----------------------------------------
 There are two possible methods of using Kdump.
+kdump를 이용하는데는 2가지의 방법이 있다.
 
-1) Build a separate custom dump-capture kernel for capturing the
-   kernel core dump.
+1) Build a separate custom dump-capture kernel for capturing the kernel core dump.
+1) 커널 코어 덤프를 캡처하기 위해 별도의 custom dump-capture 커널을 빌드할 수 있다.
 
-2) Or use the system kernel binary itself as dump-capture kernel and there is
-   no need to build a separate dump-capture kernel. This is possible
-   only with the architectures which support a relocatable kernel. As
-   of today, i386, x86_64, ppc64, ia64, arm and arm64 architectures support
-   relocatable kernel.
+2) Or use the system kernel binary itself as dump-capture kernel and there is no need to build a separate dump-capture kernel. This is possible only with the architectures which support a relocatable kernel. As of today, i386, x86_64, ppc64, ia64, arm and arm64 architectures support relocatable kernel.
+2) 또는 system 커널 바이너리 자체를 dump-capture 커널로 사용할 수 있다. 이 경우는  별도의 dump-capture 커널을 작성할 필요가 없다. 단  아키텍처가 relocatable 커널을 지원하는 경우만 가능한다. 현재 i386, x86_64, ppc64, ia64, arm 및 arm64 아키텍처가 지원한다.
 
-Building a relocatable kernel is advantageous from the point of view that
-one does not have to build a second kernel for capturing the dump. But
-at the same time one might want to build a custom dump capture kernel
-suitable to his needs.
+Building a relocatable kernel is advantageous from the point of view that one does not have to build a second kernel for capturing the dump. But at the same time one might want to build a custom dump capture kernel suitable to his needs.
+relocatable 커널을 빌드하는 것은 덤프를 캡처하기 위해 두 번째 커널을 빌드 할 필요가 없다는 관점에서 유리한다. 그러나 동시에 사용자는 자신의 필요에 맞는 사용자 정의 dump-capture 커널을 빌드하고자 할 수 있다.
 
-Following are the configuration setting required for system and
-dump-capture kernels for enabling kdump support.
+Following are the configuration setting required for system and dump-capture kernels for enabling kdump support.
+다음은 kdump 지원을 활성화하기 위해 시스템 및 dump-capture 커널에 필요한 구성 설정이다.
 
 System kernel config options
+system 커널 설정옵션
 ----------------------------
 
 1) Enable "kexec system call" in "Processor type and features."
+1) "kexec system call" in "Processor type and features."을 활성화한다.
 
    CONFIG_KEXEC=y
 
-2) Enable "sysfs file system support" in "Filesystem" -> "Pseudo
-   filesystems." This is usually enabled by default.
+2) Enable "sysfs file system support" in "Filesystem" -> "Pseudo filesystems." This is usually enabled by default.
+2) "Filesystem" -> "Pseudo filesystems"에서 "sysfs file system support"를 활성화한다. 일반적으로 활성화되어 있따.
 
    CONFIG_SYSFS=y
 
-   Note that "sysfs file system support" might not appear in the "Pseudo
-   filesystems" menu if "Configure standard kernel features (for small
-   systems)" is not enabled in "General Setup." In this case, check the
-   .config file itself to ensure that sysfs is turned on, as follows:
+   Note that "sysfs file system support" might not appear in the "Pseudo filesystems" menu if "Configure standard kernel features (for small systems)" is not enabled in "General Setup." In this case, check the .config file itself to ensure that sysfs is turned on, as follows:
+   "General Setup"에서 "Configure standard kernel features (for small systems)"가 활성화되어 있지 않으면 "sysfs file system support" 이 "Pseudo filesystems"에서 보이지 않을 수 있다는 것을 유의해야 한다. 이런 경우에는 .config 파일을 아래와 같이 체크해서 sysfs가 활성화되어 있는지 봐야 한다.
 
    grep 'CONFIG_SYSFS' .config
 
 3) Enable "Compile the kernel with debug info" in "Kernel hacking."
+3) "Kernel hacking."에서 "Compile the kernel with debug info" 항목을 활성화한다.
 
    CONFIG_DEBUG_INFO=Y
 
-   This causes the kernel to be built with debug symbols. The dump
-   analysis tools require a vmlinux with debug symbols in order to read
-   and analyze a dump file.
+   This causes the kernel to be built with debug symbols. The dump analysis tools require a vmlinux with debug symbols in order to read and analyze a dump file.
+   커널이 debug symbol과 함께 빌드되도록 한다. dump 분석 툴은 dump file을 읽고 분석하기 위해 debug symbol이 포함된 vmlinux을 필요로 한다.
 
 Dump-capture kernel config options (Arch Independent)
+dump-capture 커널 설정 옵션들(공통사항)
 -----------------------------------------------------
 
-1) Enable "kernel crash dumps" support under "Processor type and
-   features":
+1) Enable "kernel crash dumps" support under "Processor type and features":
+1) "Processor type and features" 아래에  "kernel crash dumps" 항목을 활성화한다.
 
    CONFIG_CRASH_DUMP=y
 
 2) Enable "/proc/vmcore support" under "Filesystems" -> "Pseudo filesystems".
+2) "Filesystems" -> "Pseudo filesystems" 아래에 "/proc/vmcore support" 항목을 활성화한다.
 
    CONFIG_PROC_VMCORE=y
    (CONFIG_PROC_VMCORE is set by default when CONFIG_CRASH_DUMP is selected.)
+   (CONFIG_PROC_VMCORE는 CONFIG_CRASH_DUMP가 활성화되면 같이 활성화된다.)
 
 Dump-capture kernel config options (Arch Dependent, i386 and x86_64)
+dump-capture 커널 설정 옵션들(아키텍쳐 의존적인 사항)
 --------------------------------------------------------------------
 
-1) On i386, enable high memory support under "Processor type and
-   features":
+1) On i386, enable high memory support under "Processor type and features":
+1) i386에서는, "Processor type and features" 아래의 high memory 지원을 활성화한다.
 
    CONFIG_HIGHMEM64G=y
    or
    CONFIG_HIGHMEM4G
 
-2) On i386 and x86_64, disable symmetric multi-processing support
-   under "Processor type and features":
+2) On i386 and x86_64, disable symmetric multi-processing support under "Processor type and features":
+2) i386과 x86_64에서는, "Processor type and features" 아래의 SMP 항목을 비활성화한다.
 
    CONFIG_SMP=n
 
-   (If CONFIG_SMP=y, then specify maxcpus=1 on the kernel command line
-   when loading the dump-capture kernel, see section "Load the Dump-capture
-   Kernel".)
+   (If CONFIG_SMP=y, then specify maxcpus=1 on the kernel command line when loading the dump-capture kernel, see section "Load the Dump-capture Kernel".)
+   CONFIG_SMP=y인 경우에는 dump-capture 커널을 로드 할 때 부트파라미터로 maxcpus=1을 지정한다.("dump-capture 커널 로딩"절 참조).
 
-3) If one wants to build and use a relocatable kernel,
-   Enable "Build a relocatable kernel" support under "Processor type and
-   features"
+3) If one wants to build and use a relocatable kernel, Enable "Build a relocatable kernel" support under "Processor type and features"
+3) relocatable 커널을 빌드하고 사용하려면 "Processor type and features"에서 "Build a relocatable kernel" 항목을 활성화한다. 
 
    CONFIG_RELOCATABLE=y
 
-4) Use a suitable value for "Physical address where the kernel is
-   loaded" (under "Processor type and features"). This only appears when
-   "kernel crash dumps" is enabled. A suitable value depends upon
-   whether kernel is relocatable or not.
+4) Use a suitable value for "Physical address where the kernel is loaded" (under "Processor type and features"). This only appears when "kernel crash dumps" is enabled. A suitable value depends upon whether kernel is relocatable or not.
+4) "커널이로드 된 실제 주소"( "프로세서 유형 및 기능"에서)에 적합한 값을 사용하십시오. 이는 "커널 크래시 덤프"가 활성화 된 경우에만 나타납니다. 적절한 값은 커널의 재배치 가능 여부에 달려 있다.
 
-   If you are using a relocatable kernel use CONFIG_PHYSICAL_START=0x100000
-   This will compile the kernel for physical address 1MB, but given the fact
-   kernel is relocatable, it can be run from any physical address hence
-   kexec boot loader will load it in memory region reserved for dump-capture
-   kernel.
+   If you are using a relocatable kernel use CONFIG_PHYSICAL_START=0x100000 This will compile the kernel for physical address 1MB, but given the fact kernel is relocatable, it can be run from any physical address hence kexec boot loader will load it in memory region reserved for dump-capture kernel.
+      재배치 가능 커널을 사용하는 경우 CONFIG_PHYSICAL_START = 0x100000을 사용하십시오. 실제 주소가 1MB 인 커널을 컴파일하지만 실제 커널이 재배치 가능하다면 임의의 실제 주소에서 실행될 수 있으므로 kexec 부트 로더는 덤프 용으로 메모리 영역에로드한다 - 커널 캡처.
 
-   Otherwise it should be the start of memory region reserved for
-   second kernel using boot parameter "crashkernel=Y@X". Here X is
-   start of memory region reserved for dump-capture kernel.
-   Generally X is 16MB (0x1000000). So you can set
-   CONFIG_PHYSICAL_START=0x1000000
+   Otherwise it should be the start of memory region reserved for second kernel using boot parameter "crashkernel=Y@X". Here X is start of memory region reserved for dump-capture kernel.  Generally X is 16MB (0x1000000). So you can set CONFIG_PHYSICAL_START=0x1000000
+      그렇지 않으면 부팅 매개 변수 "crashkernel = Y @ X"를 사용하여 두 번째 커널 용으로 예약 된 메모리 영역의 시작이어야한다. 여기서 X는 dump-capture 커널 용으로 예약 된 메모리 영역의 시작이다. 일반적으로 X는 16MB (0x1000000)이다. 따라서 CONFIG_PHYSICAL_START = 0x1000000을 설정할 수 있다.
 
-5) Make and install the kernel and its modules. DO NOT add this kernel
-   to the boot loader configuration files.
+5) Make and install the kernel and its modules. DO NOT add this kernel to the boot loader configuration files.
+5) 커널과 모듈을 만들고 설치하십시오. 이 커널을 부트 로더 구성 파일에 추가하지 마십시오.
 
 Dump-capture kernel config options (Arch Dependent, ppc64)
 ----------------------------------------------------------
@@ -224,51 +211,43 @@ Dump-capture kernel config options (Arch Dependent, ppc64)
 Dump-capture kernel config options (Arch Dependent, ia64)
 ----------------------------------------------------------
 
-- No specific options are required to create a dump-capture kernel
-  for ia64, other than those specified in the arch independent section
-  above. This means that it is possible to use the system kernel
-  as a dump-capture kernel if desired.
+- No specific options are required to create a dump-capture kernel for ia64, other than those specified in the arch independent section above. This means that it is possible to use the system kernel as a dump-capture kernel if desired.
+- 위의 아치 독립 섹션에서 지정된 것 이외의 다른 옵션은 ia64 용 dump-capture 커널을 작성하는 데 필요하지 않다. 즉, 원하는 경우 dump-capture 커널로 system 커널을 사용할 수 있다.
 
-  The crashkernel region can be automatically placed by the system
-  kernel at run time. This is done by specifying the base address as 0,
-  or omitting it all together.
+
+  The crashkernel region can be automatically placed by the system kernel at run time. This is done by specifying the base address as 0, or omitting it all together.
+
+   크래시 커널 영역은 런타임에 system 커널에 의해 자동으로 배치 될 수 있다. 이것은 기본 주소를 0으로 지정하거나 함께 생략함으로써 수행된다.
 
   crashkernel=256M@0
   or
   crashkernel=256M
 
-  If the start address is specified, note that the start address of the
-  kernel will be aligned to 64Mb, so if the start address is not then
-  any space below the alignment point will be wasted.
+  If the start address is specified, note that the start address of the kernel will be aligned to 64Mb, so if the start address is not then any space below the alignment point will be wasted.
+   시작 주소가 지정되면 커널의 시작 주소가 64Mb로 정렬되므로 시작 주소가 아닌 경우 정렬 지점 아래의 공간이 낭비된다.
 
 Dump-capture kernel config options (Arch Dependent, arm)
 ----------------------------------------------------------
 
--   To use a relocatable kernel,
-    Enable "AUTO_ZRELADDR" support under "Boot" options:
+-   To use a relocatable kernel, Enable "AUTO_ZRELADDR" support under "Boot" options:
 
     AUTO_ZRELADDR=y
 
 Dump-capture kernel config options (Arch Dependent, arm64)
 ----------------------------------------------------------
 
-- Please note that kvm of the dump-capture kernel will not be enabled
-  on non-VHE systems even if it is configured. This is because the CPU
-  will not be reset to EL2 on panic.
+- Please note that kvm of the dump-capture kernel will not be enabled on non-VHE systems even if it is configured. This is because the CPU will not be reset to EL2 on panic.
 
 Extended crashkernel syntax
 ===========================
 
-While the "crashkernel=size[@offset]" syntax is sufficient for most
-configurations, sometimes it's handy to have the reserved memory dependent
-on the value of System RAM -- that's mostly for distributors that pre-setup
-the kernel command line to avoid a unbootable system after some memory has
-been removed from the machine.
+While the "crashkernel=size[@offset]" syntax is sufficient for most configurations, sometimes it's handy to have the reserved memory dependent on the value of System RAM -- that's mostly for distributors that pre-setup the kernel command line to avoid a unbootable system after some memory has been removed from the machine.
+"crashkernel = size [@offset]"구문이 대부분의 구성에 충분하지만 예약 된 메모리를 시스템 RAM의 값에 종속시키는 것이 편리 할 때가 있다. 대부분 시스템 메모리를 피하기 위해 커널 명령 줄을 사전 설정하는 배포자 용이다. 일부 메모리가 시스템에서 제거 된 후 시스템을 부팅 할 수 없습니다.
+
 
 The syntax is:
 
-    crashkernel=<range1>:<size1>[,<range2>:<size2>,...][@offset]
-    range=start-[end]
+    crashkernel=<range1>:<size1>[,<range2>:<size2>,...][@offset] range=start-[end]
 
 For example:
 
@@ -276,54 +255,48 @@ For example:
 
 This would mean:
 
-    1) if the RAM is smaller than 512M, then don't reserve anything
-       (this is the "rescue" case)
+    1) if the RAM is smaller than 512M, then don't reserve anything (this is the "rescue" case)
     2) if the RAM size is between 512M and 2G (exclusive), then reserve 64M
     3) if the RAM size is larger than 2G, then reserve 128M
+     1) RAM이 512M보다 작 으면 아무것도 예약하지 마십시오 (이것은 "복구"케이스이다)
+     2) RAM 크기가 512M ~ 2G (배타적) 인 경우 64M을 예약
+     3) RAM 크기가 2G보다 크면 128M을 예약한다.
 
 
 
 Boot into System Kernel
 =======================
 
-1) Update the boot loader (such as grub, yaboot, or lilo) configuration
-   files as necessary.
+1) Update the boot loader (such as grub, yaboot, or lilo) configuration files as necessary.
+1) 필요에 따라 부트 로더 (예 : grub, yaboot 또는 lilo) 구성 파일을 업데이트한다.
 
-2) Boot the system kernel with the boot parameter "crashkernel=Y@X",
-   where Y specifies how much memory to reserve for the dump-capture kernel
-   and X specifies the beginning of this reserved memory. For example,
-   "crashkernel=64M@16M" tells the system kernel to reserve 64 MB of memory
-   starting at physical address 0x01000000 (16MB) for the dump-capture kernel.
+
+2) Boot the system kernel with the boot parameter "crashkernel=Y@X", where Y specifies how much memory to reserve for the dump-capture kernel and X specifies the beginning of this reserved memory. For example, "crashkernel=64M@16M" tells the system kernel to reserve 64 MB of memory starting at physical address 0x01000000 (16MB) for the dump-capture kernel.
+2) 부팅 매개 변수 "crashkernel = Y @ X"로 system 커널을 부팅한다. 여기서 Y는 dump-capture 커널에 예약 할 메모리 양을 지정하고 X는 예약 된 메모리의 시작을 지정한다. 예를 들어 "crashkernel = 64M @ 16M"은 dump-capture 커널에 대해 물리적 주소 0x01000000 (16MB)에서 시작하여 64MB의 메모리를 system 커널에 예약하도록 지시한다.
 
    On x86 and x86_64, use "crashkernel=64M@16M".
 
    On ppc64, use "crashkernel=128M@32M".
 
-   On ia64, 256M@256M is a generous value that typically works.
-   The region may be automatically placed on ia64, see the
-   dump-capture kernel config option notes above.
-   If use sparse memory, the size should be rounded to GRANULE boundaries.
+   On ia64, 256M@256M is a generous value that typically works.  The region may be automatically placed on ia64, see the dump-capture kernel config option notes above.  If use sparse memory, the size should be rounded to GRANULE boundaries.
+   ia64에서 256M @ 256M은 일반적으로 작동하는 관대 한 가치이다. 영역은 ia64에 자동으로 배치 될 수 있다 (위의 dump-capture 커널 구성 옵션 메모 참조). 스파 스 메모리를 사용하는 경우 크기는 GRANULE 경계로 반올림되어야한다.
 
-   On s390x, typically use "crashkernel=xxM". The value of xx is dependent
-   on the memory consumption of the kdump system. In general this is not
-   dependent on the memory size of the production system.
+   On s390x, typically use "crashkernel=xxM". The value of xx is dependent on the memory consumption of the kdump system. In general this is not dependent on the memory size of the production system.
+   s390x에서는 일반적으로 "crashkernel = xxM"을 사용한다. xx의 값은 kdump 시스템의 메모리 소비에 따라 다릅니다. 일반적으로 이는 프로덕션 시스템의 메모리 크기에 종속되지 않다.
 
-   On arm, the use of "crashkernel=Y@X" is no longer necessary; the
-   kernel will automatically locate the crash kernel image within the
-   first 512MB of RAM if X is not given.
+   On arm, the use of "crashkernel=Y@X" is no longer necessary; the kernel will automatically locate the crash kernel image within the first 512MB of RAM if X is not given.
+   "crashkernel = Y @ X"의 사용은 더 이상 필요하지 않다. X가 주어지지 않으면 커널은 자동으로 크래시 커널 이미지를 첫 번째 512MB RAM 내에 위치시킵니다.
 
-   On arm64, use "crashkernel=Y[@X]".  Note that the start address of
-   the kernel, X if explicitly specified, must be aligned to 2MiB (0x200000).
+   On arm64, use "crashkernel=Y[@X]".  Note that the start address of the kernel, X if explicitly specified, must be aligned to 2MiB (0x200000).
+   arm64에서 "crashkernel = Y [@X]"를 사용하십시오. 커널의 시작 주소 인 X가 명시 적으로 지정되면 X는 2MiB (0x200000)로 정렬되어야한다.
+
 
 Load the Dump-capture Kernel
 ============================
 
-After booting to the system kernel, dump-capture kernel needs to be
-loaded.
+After booting to the system kernel, dump-capture kernel needs to be loaded.
 
-Based on the architecture and type of image (relocatable or not), one
-can choose to load the uncompressed vmlinux or compressed bzImage/vmlinuz
-of dump-capture kernel. Following is the summary.
+Based on the architecture and type of image (relocatable or not), one can choose to load the uncompressed vmlinux or compressed bzImage/vmlinuz of dump-capture kernel. Following is the summary.
 
 For i386 and x86_64:
 	- Use vmlinux if kernel is not relocatable.
@@ -339,41 +312,34 @@ For arm:
 For arm64:
 	- Use vmlinux or Image
 
-If you are using an uncompressed vmlinux image then use following command
-to load dump-capture kernel.
+If you are using an uncompressed vmlinux image then use following command to load dump-capture kernel.
 
    kexec -p <dump-capture-kernel-vmlinux-image> \
    --initrd=<initrd-for-dump-capture-kernel> --args-linux \
    --append="root=<root-dev> <arch-specific-options>"
 
-If you are using a compressed bzImage/vmlinuz, then use following command
-to load dump-capture kernel.
+If you are using a compressed bzImage/vmlinuz, then use following command to load dump-capture kernel.
 
    kexec -p <dump-capture-kernel-bzImage> \
    --initrd=<initrd-for-dump-capture-kernel> \
    --append="root=<root-dev> <arch-specific-options>"
 
-If you are using a compressed zImage, then use following command
-to load dump-capture kernel.
+If you are using a compressed zImage, then use following command to load dump-capture kernel.
 
    kexec --type zImage -p <dump-capture-kernel-bzImage> \
    --initrd=<initrd-for-dump-capture-kernel> \
    --dtb=<dtb-for-dump-capture-kernel> \
    --append="root=<root-dev> <arch-specific-options>"
 
-If you are using an uncompressed Image, then use following command
-to load dump-capture kernel.
+If you are using an uncompressed Image, then use following command to load dump-capture kernel.
 
    kexec -p <dump-capture-kernel-Image> \
    --initrd=<initrd-for-dump-capture-kernel> \
    --append="root=<root-dev> <arch-specific-options>"
 
-Please note, that --args-linux does not need to be specified for ia64.
-It is planned to make this a no-op on that architecture, but for now
-it should be omitted
+Please note, that --args-linux does not need to be specified for ia64.  It is planned to make this a no-op on that architecture, but for now it should be omitted
 
-Following are the arch specific command line options to be used while
-loading dump-capture kernel.
+Following are the arch specific command line options to be used while loading dump-capture kernel.
 
 For i386, x86_64 and ia64:
 	"1 irqpoll maxcpus=1 reset_devices"
@@ -392,79 +358,65 @@ For arm64:
 
 Notes on loading the dump-capture kernel:
 
-* By default, the ELF headers are stored in ELF64 format to support
-  systems with more than 4GB memory. On i386, kexec automatically checks if
-  the physical RAM size exceeds the 4 GB limit and if not, uses ELF32.
-  So, on non-PAE systems, ELF32 is always used.
+* By default, the ELF headers are stored in ELF64 format to support systems with more than 4GB memory. On i386, kexec automatically checks if the physical RAM size exceeds the 4 GB limit and if not, uses ELF32.  So, on non-PAE systems, ELF32 is always used.
+* 기본적으로 ELF 헤더는 4GB 이상의 메모리가있는 시스템을 지원하기 위해 ELF64 형식으로 저장된다. i386에서 kexec은 실제 RAM 크기가 4GB 제한을 초과하는지 자동으로 확인하고 그렇지 않은 경우 ELF32를 사용한다. 따라서 비 PAE 시스템에서는 ELF32가 항상 사용된다.
 
-  The --elf32-core-headers option can be used to force the generation of ELF32
-  headers. This is necessary because GDB currently cannot open vmcore files
-  with ELF64 headers on 32-bit systems.
+  The --elf32-core-headers option can be used to force the generation of ELF32 headers. This is necessary because GDB currently cannot open vmcore files with ELF64 headers on 32-bit systems.
+  --elf32-core-headers 옵션은 ELF32 헤더의 생성을 강제하는 데 사용될 수 있다. 이것은 GDB가 현재 32 비트 시스템에서 ELF64 헤더가있는 vmcore 파일을 열 수 없기 때문에 필요한다.
 
-* The "irqpoll" boot parameter reduces driver initialization failures
-  due to shared interrupts in the dump-capture kernel.
 
-* You must specify <root-dev> in the format corresponding to the root
-  device name in the output of mount command.
+* The "irqpoll" boot parameter reduces driver initialization failures due to shared interrupts in the dump-capture kernel.
+* "irqpoll"부팅 매개 변수는 dump-capture 커널의 공유 인터럽트로 인한 드라이버 초기화 오류를 줄이다.
 
-* Boot parameter "1" boots the dump-capture kernel into single-user
-  mode without networking. If you want networking, use "3".
 
-* We generally don' have to bring up a SMP kernel just to capture the
-  dump. Hence generally it is useful either to build a UP dump-capture
-  kernel or specify maxcpus=1 option while loading dump-capture kernel.
-  Note, though maxcpus always works, you had better replace it with
-  nr_cpus to save memory if supported by the current ARCH, such as x86.
+* You must specify <root-dev> in the format corresponding to the root device name in the output of mount command.
+* mount 명령의 출력에서 ​​루트 장치 이름에 해당하는 형식으로 <root-dev>를 지정해야한다.
 
-* You should enable multi-cpu support in dump-capture kernel if you intend
-  to use multi-thread programs with it, such as parallel dump feature of
-  makedumpfile. Otherwise, the multi-thread program may have a great
-  performance degradation. To enable multi-cpu support, you should bring up an
-  SMP dump-capture kernel and specify maxcpus/nr_cpus, disable_cpu_apicid=[X]
-  options while loading it.
+* Boot parameter "1" boots the dump-capture kernel into single-user mode without networking. If you want networking, use "3".
+* 부트 매개 변수 "1"은 네트워킹없이 dump-capture 커널을 단일 사용자 모드로 부트한다. 네트워킹을 원하면 "3"을 사용하십시오.
 
-* For s390x there are two kdump modes: If a ELF header is specified with
-  the elfcorehdr= kernel parameter, it is used by the kdump kernel as it
-  is done on all other architectures. If no elfcorehdr= kernel parameter is
-  specified, the s390x kdump kernel dynamically creates the header. The
-  second mode has the advantage that for CPU and memory hotplug, kdump has
-  not to be reloaded with kexec_load().
 
-* For s390x systems with many attached devices the "cio_ignore" kernel
-  parameter should be used for the kdump kernel in order to prevent allocation
-  of kernel memory for devices that are not relevant for kdump. The same
-  applies to systems that use SCSI/FCP devices. In that case the
-  "allow_lun_scan" zfcp module parameter should be set to zero before
-  setting FCP devices online.
+* We generally don' have to bring up a SMP kernel just to capture the dump. Hence generally it is useful either to build a UP dump-capture kernel or specify maxcpus=1 option while loading dump-capture kernel.  Note, though maxcpus always works, you had better replace it with nr_cpus to save memory if supported by the current ARCH, such as x86.
+* 우리는 일반적으로 덤프를 캡처하기 위해 SMP 커널을 가져와야한다. 따라서 일반적으로 dump-capture 커널을로드하거나 maxcpus = 1 옵션을 지정하여 dump-capture 커널을로드하는 것이 유용한다. maxcpus는 항상 작동하지만 x86과 같은 현재 ARCH에서 지원하는 경우 nr_cpus로 바꾸면 메모리를 절약 할 수 있다.
+
+
+* You should enable multi-cpu support in dump-capture kernel if you intend to use multi-thread programs with it, such as parallel dump feature of makedumpfile. Otherwise, the multi-thread program may have a great performance degradation. To enable multi-cpu support, you should bring up an SMP dump-capture kernel and specify maxcpus/nr_cpus, disable_cpu_apicid=[X] options while loading it.
+* makedumpfile의 병렬 덤프 기능과 같이 다중 스레드 프로그램을 사용하려는 경우 dump-capture 커널에서 다중 CPU 지원을 활성화해야한다. 그렇지 않으면 다중 스레드 프로그램의 성능이 크게 저하 될 수 있다. 멀티 CPU 지원을 사용하려면 SMP dump-capture 커널을 불러와 maxcpus / nr_cpus, disable_cpu_apicid = [X] 옵션을로드하는 동안 지정해야한다.
+
+* For s390x there are two kdump modes: If a ELF header is specified with the elfcorehdr= kernel parameter, it is used by the kdump kernel as it is done on all other architectures. If no elfcorehdr= kernel parameter is specified, the s390x kdump kernel dynamically creates the header. The second mode has the advantage that for CPU and memory hotplug, kdump has not to be reloaded with kexec_load().
+* s390x의 경우 두 가지 kdump 모드가 있다. ELF 헤더가 elfcorehdr = kernel 매개 변수로 지정되면 kdump 커널이 다른 모든 아키텍처에서 수행 한 것처럼 사용된다. elfcorehdr = kernel 매개 변수가 지정되지 않으면 s390x kdump 커널이 동적으로 헤더를 만듭니다. 두 번째 모드는 CPU 및 메모리 핫 플러그의 경우 kdump를 kexec_load ()로 다시로드하지 않아도된다는 장점이 있다.
+
+
+
+* For s390x systems with many attached devices the "cio_ignore" kernel parameter should be used for the kdump kernel in order to prevent allocation of kernel memory for devices that are not relevant for kdump. The same applies to systems that use SCSI/FCP devices. In that case the "allow_lun_scan" zfcp module parameter should be set to zero before setting FCP devices online.
+* 연결된 장치가 많은 s390x 시스템의 경우 kdump 커널과 관련이없는 장치의 커널 메모리 할당을 방지하기 위해 "cio_ignore"커널 매개 변수를 kdump 커널에 사용해야한다. SCSI / FCP 장치를 사용하는 시스템에도 동일하게 적용된다. 이 경우 FCP 장치를 온라인으로 설정하기 전에 "allow_lun_scan"zfcp 모듈 매개 변수를 0으로 설정해야한다.
+
 
 Kernel Panic
 ============
 
-After successfully loading the dump-capture kernel as previously
-described, the system will reboot into the dump-capture kernel if a
-system crash is triggered.  Trigger points are located in panic(),
-die(), die_nmi() and in the sysrq handler (ALT-SysRq-c).
+After successfully loading the dump-capture kernel as previously described, the system will reboot into the dump-capture kernel if a system crash is triggered.  Trigger points are located in panic(), die(), die_nmi() and in the sysrq handler (ALT-SysRq-c).
+앞에서 설명한대로 dump-capture 커널을 성공적으로로드 한 후 시스템 충돌이 발생하면 dump-capture 커널로 시스템이 재부팅된다. 트리거 포인트는 panic (), die (), die_nmi () 및 sysrq 핸들러 (ALT-SysRq-c)에 있다.
 
 The following conditions will execute a crash trigger point:
+다음 조건은 크래시 트리거 지점을 실행한다.
 
-If a hard lockup is detected and "NMI watchdog" is configured, the system
-will boot into the dump-capture kernel ( die_nmi() ).
+If a hard lockup is detected and "NMI watchdog" is configured, the system will boot into the dump-capture kernel ( die_nmi() ).
+하드 록업이 감지되고 "NMI 워치 독"이 구성되면 시스템은 dump-capture 커널 (die_nmi ())로 부팅한다.
 
-If die() is called, and it happens to be a thread with pid 0 or 1, or die()
-is called inside interrupt context or die() is called and panic_on_oops is set,
-the system will boot into the dump-capture kernel.
+If die() is called, and it happens to be a thread with pid 0 or 1, or die() is called inside interrupt context or die() is called and panic_on_oops is set, the system will boot into the dump-capture kernel.
+die ()가 호출되고 pid가 0 또는 1 인 쓰레드이거나 die ()가 인터럽트 컨텍스트 내에서 호출되거나 die ()가 호출되고 panic_on_oops가 설정되면 시스템은 dump-capture 커널로 부팅한다 .
 
-On powerpc systems when a soft-reset is generated, die() is called by all cpus
-and the system will boot into the dump-capture kernel.
+On powerpc systems when a soft-reset is generated, die() is called by all cpus and the system will boot into the dump-capture kernel.
+soft-reset이 생성 될 때 powerpc 시스템에서 die ()가 모든 cpus에 의해 호출되고 시스템은 dump-capture 커널로 부팅한다.
 
-For testing purposes, you can trigger a crash by using "ALT-SysRq-c",
-"echo c > /proc/sysrq-trigger" or write a module to force the panic.
+For testing purposes, you can trigger a crash by using "ALT-SysRq-c", "echo c > /proc/sysrq-trigger" or write a module to force the panic.
+테스트 목적으로, "ALT-SysRq-c", "echo c> / proc / sysrq-trigger"를 사용하여 크래시를 발생 시키거나 패닉을 강요하기위한 모듈을 작성할 수 있다.
 
 Write Out the Dump File
 =======================
 
-After the dump-capture kernel is booted, write out the dump file with
-the following command:
+After the dump-capture kernel is booted, write out the dump file with the following command:
 
    cp /proc/vmcore <dump-file>
 
@@ -473,33 +425,29 @@ Analysis
 ========
 
 Before analyzing the dump image, you should reboot into a stable kernel.
+덤프 이미지를 분석하기 전에 안정적인 커널로 재부트해야한다.
 
-You can do limited analysis using GDB on the dump file copied out of
-/proc/vmcore. Use the debug vmlinux built with -g and run the following
-command:
+You can do limited analysis using GDB on the dump file copied out of /proc/vmcore. Use the debug vmlinux built with -g and run the following command:
+/ proc / vmcore에서 복사 된 덤프 파일에서 GDB를 사용하여 제한된 분석을 수행 할 수 있다. -g로 빌드 된 디버그 vmlinux를 사용하고 다음 명령을 실행하십시오 :
 
    gdb vmlinux <dump-file>
 
-Stack trace for the task on processor 0, register display, and memory
-display work fine.
+Stack trace for the task on processor 0, register display, and memory display work fine.
+프로세서 0, 레지스터 디스플레이 및 메모리 디스플레이의 작업에 대한 스택 추적은 정상적으로 작동한다.
 
-Note: GDB cannot analyze core files generated in ELF64 format for x86.
-On systems with a maximum of 4GB of memory, you can generate
-ELF32-format headers using the --elf32-core-headers kernel option on the
-dump kernel.
+Note: GDB cannot analyze core files generated in ELF64 format for x86.  On systems with a maximum of 4GB of memory, you can generate ELF32-format headers using the --elf32-core-headers kernel option on the dump kernel.
+참고 : GDB는 x86 용 ELF64 형식으로 생성 된 코어 파일을 분석 할 수 없습니다. 최대 4GB 메모리가있는 시스템에서는 덤프 커널에 --elf32-core-headers 커널 옵션을 사용하여 ELF32 형식 헤더를 생성 할 수 있다.
 
-You can also use the Crash utility to analyze dump files in Kdump
-format. Crash is available on Dave Anderson's site at the following URL:
+You can also use the Crash utility to analyze dump files in Kdump format. Crash is available on Dave Anderson's site at the following URL:
+또한 Crash 유틸리티를 사용하여 덤프 파일을 Kdump 형식으로 분석 할 수 있다. 충돌은 Dave Anderson 사이트에서 볼 수 있으며 다음 URL에서 확인할 수 있다.
 
    http://people.redhat.com/~anderson/
 
 Trigger Kdump on WARN()
 =======================
 
-The kernel parameter, panic_on_warn, calls panic() in all WARN() paths.  This
-will cause a kdump to occur at the panic() call.  In cases where a user wants
-to specify this during runtime, /proc/sys/kernel/panic_on_warn can be set to 1
-to achieve the same behaviour.
+The kernel parameter, panic_on_warn, calls panic() in all WARN() paths.  This will cause a kdump to occur at the panic() call.  In cases where a user wants to specify this during runtime, /proc/sys/kernel/panic_on_warn can be set to 1 to achieve the same behaviour.
+커널 매개 변수 인 panic_on_warn은 모든 WARN () 경로에서 panic ()을 호출한다. 그러면 panic () 호출에서 kdump가 발생한다. 사용자가 런타임 중에 이것을 지정하기를 원하는 경우, / proc / sys / kernel / panic_on_warn을 1로 설정하여 동일한 동작을 얻을 수 있다.
 
 Contact
 =======
