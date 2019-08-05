@@ -1,7 +1,10 @@
 #!/bin/bash
+INPUT=""
+OUTPUT=""
 DEBUG="0"
 OP_MODE="all"
 FILELIST="cpu0 cpu1 cpu2 cpu3"
+PID=""
 #FILELIST="cpu0"
 
 get_only_switch_field()
@@ -183,9 +186,44 @@ do_all_stage()
 	merge_cpuusage_of_pertask "output/pertask/elapsed"
 }
 
+get_process_detail_evt()
+{
+	if [ ! "$1" ]; then
+		echo "need to pass *pid* argument"
+		exit 1
+	fi
+
+	if [ ! "$2" ]; then
+		echo "There is no input file argument, use ./processes.txt"
+		INPUT="processes.txt"
+	fi
+
+	if [ ! "$3" ]; then
+		echo "There is no output file argument, use process.<PID>.stat"
+		OUTPUT="process.$pid.stat"
+	fi
+
+	echo -n "Paring data - "
+	cat $INPUT | grep $PID | tr -s " " > output/tmp.pick_n_trim
+	cat output/tmp.pick_n_trim | cut -d' ' -f14 > output/tmp.threadlist
+	cat output/tmp.threadlist | sort | uniq > output/tmp.threadlist.uniq
+
+	TASK_LIST=`cat output/tmp.threadlist.uniq`
+
+	for task in $TASK_LIST; do
+		CNT_PREEMPTION=`cat cpu* | grep prev_comm=$task | grep prev_state=R | wc -l`
+		CNT_YIELD=`cat cpu* | grep prev_comm=$task | grep -v prev_state=R | wc -l`
+		echo $task $CNT_PREEMPTION $CNT_YIELD >> output/$OUTPUT
+	done
+	echo "Done"
+
+	ls -al output/$OUTPUT
+}
+
 while [[ $# -gt 0 ]]; do
 	argument="$1"
 	case $argument in
+                --pid) PID="$2"; echo "option - targeted Process ID($PID)"; shift; shift; ;;
 		--mode) OP_MODE=$2; echo "option - mode($OP_MODE)"; shift; shift; ;;
 		--debug) DEBUG=$2; shift; shift; ;;
 		--input) INPUT="$2"; echo "option - input($INPUT)"; shift; shift; ;;
@@ -212,6 +250,8 @@ elif [ "$OP_MODE" == "gcu" ]; then
 	get_cpuusage_for_task $INPUT
 elif [ "$OP_MODE" == "merge_cpuusage" ]; then
 	merge_cpuusage_of_pertask $INPUT
+elif [ "$OP_MODE" == "get_ypt" ]; then
+	get_process_detail_evt $PID $INPUT $OUTPUT
 else
 	do_all_stage
 fi
