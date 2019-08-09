@@ -88,7 +88,7 @@ get_cpuusage_for_pertask()
 {
 	mkdir -p output/pertask/elapsed
 
-	total=20
+	total=40
 	echo "split event for $total task"
 
 	echo "Calculate per-task cpuusage for $total task"
@@ -99,7 +99,7 @@ get_cpuusage_for_pertask()
 	#for filename in `cat $1 | tr ',' '.' `; do
 
 	# ref. http://faq.hostway.co.kr/Linux_ETC/3799
-	for filename in `ls -S output/pertask | head -n20`; do
+	for filename in `ls -S output/pertask | head -n$total`; do
 		#get name & pid from filename
 		echo "($COUNTER/$total) - $filename"
 		get_cpuusage_for_task $filename
@@ -200,11 +200,11 @@ get_process_detail_evt()
 
 	if [ ! "$3" ]; then
 		echo "There is no output file argument, use process.<PID>.stat"
-		OUTPUT="process.$pid.stat"
+		OUTPUT="process.$PID.stat"
 	fi
 
 	echo -n "Paring data - "
-	cat $INPUT | grep $PID | tr -s " " > output/tmp.pick_n_trim
+	cat $INPUT | tr -s " " > output/tmp.pick_n_trim
 	cat output/tmp.pick_n_trim | cut -d' ' -f14 > output/tmp.threadlist
 	cat output/tmp.threadlist | sort | uniq > output/tmp.threadlist.uniq
 
