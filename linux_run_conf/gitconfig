@@ -1,7 +1,9 @@
 [user]
+	email = seokhoon.yoon@lgepartner.com
 	name = seokhoon.yoon
-	email = iamyooon@gmail.com
 [color]
 	ui = true
 [core]
 	editor = vim
+[merge]
+	tool = vimdiff

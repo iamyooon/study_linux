@@ -143,3 +143,26 @@ echo -ne $color
 export PS1='\u@\h\[${c_sgr0}\]:\W\[${c_sgr0}\] (\[$(branch_color)\]$(parse_git_branch)\[${c_sgr0}\])\$ '
 
 source ~/.set_devtool_shortcut
+
+# Crash tool
+CRASHTOOL_PATH=/home2/seokhoon.yoon/gen11/gen11-internal/utils/crash/
+export PATH=$CRASHTOOL_PATH:$PATH
+export CRASH_EXTENSIONS=$CRASHTOOL_PATH
+
+# Ramparser
+RAMPARSER_PATH=/home2/seokhoon.yoon/gen11/gen11-internal/utils/qcom-tools/linux-ramdump-parser-v2
+export PATH=$RAMPARSER_PATH:$PATH
+
+# Scripts
+SCRIPT_PATH=/home2/seokhoon.yoon/gen11/gen11-internal/utils/scripts/
+export PATH=$SCRIPT_PATH:$PATH
+
+# Toolchain
+export ARCH=arm
+export CROSS_COMPILE=arm-oe-linux-gnueabi-
+export PATH=/home2/seokhoon.yoon/gen11/gen11-internal/toolchain/sysroot/usr/bin/armv7a-vfp-neon-oe-linux-gnueabi:/home2/seokhoon.yoon/gen11/gen11-internal/toolchain/gcc-linaro-4.9-2015.05-x86_64_arm-linux-gnueabi/bin:/home2/seokhoon.yoon/gen11/gen11-internal/toolchain/arm-eabi-4.8/bin:$PATH:/home2/seokhoon.yoon/gen11/source/common/tools/ramdump/tools/linux-ramdump-parser-v2/parsers/
+
+export PYKDUMPPATH=$CRASHTOOL_PATH/py:$CRASHTOOL_PATH/LinuxDump
+export PATH=~/bin:$PATH
+export PATH=/home/seokhoon.yoon/ccic/devtool:$PATH
+export PATH=/home/seokhoon.yoon/ccic/devtool/timeline_generator:$PATH
