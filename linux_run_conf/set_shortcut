@@ -1,5 +1,5 @@
 DEV_SHORTCUT_NAME=".set_devtool_shortcut"
-DEV_SHORTCUT_VER="1.0.1"
+DEV_SHORTCUT_VER="1.0.2"
 
 alias gs='git status'
 alias gsm='git status | more'
@@ -82,7 +82,7 @@ rebake()
 
 tar_bz()
 {
-	time tar -l lbzip2 -xvf $1 -C .
+	time tar -I lbzip2 -xvf $1 -C .
 }
 
 #######################################
