@@ -1,3 +1,6 @@
+DEV_SHORTCUT_NAME=".set_devtool_shortcut"
+DEV_SHORTCUT_VER="1.0.1"
+
 alias gs='git status'
 alias gsm='git status | more'
 alias gd='git diff'
@@ -9,7 +12,7 @@ alias gsl='git stash list'
 alias ga='git add'
 alias gl='git log'
 alias glo='git log --oneline'
-alias glp='git log -p --oneline'
+alias glp='git log -p'
 alias gca='git commit --amend'
 alias gcl='git config --list'
 alias gbv='git branch -v'
@@ -19,8 +22,6 @@ alias gc='git checkout'
 alias grh='git reset HEAD^1 --hard'
 alias gr='git reset HEAD^1'
 alias gr2='git reset HEAD~2'
-
-alias mkc='make clean'
 
 alias cd1='cd ../'
 alias cd2='cd ../..'
@@ -34,3 +35,64 @@ alias ll='ls -alF'
 alias ls='ls --color=auto'
 alias rreboot='reboot'
 alias reboot='reboot --help'
+
+###################################
+# v2csm 
+###################################
+alias v2dockerrun='docker run -v $HOME:/home/$USER --privileged=true -it --name $V2CONTAINER $V2DOCKERIMG:$V2DOCKERTAG /bin/bash'
+alias v2run='V2CONTAINER="v2csm_yoon" V2DOCKERIMG="v2csm_dev" V2DOCKERTAG="1.0" v2dockerrun'
+alias cddevice='cd device/gm/gminfo35c'
+alias cdout='cd out/target/product/gminfo35c'
+
+unzipall()
+{
+find -maxdepth 1 -name '*.zip' -exec sh -c 'unzip -d "${1%.*}" "$1"' _ {} \;
+}
+
+unzipd()
+{
+unzip -d "${1%.*}" "$1"
+}
+
+7zxall()
+{
+find -maxdepth 1 -name '*.7z' -exec sh -c '7z x "$1" -o"${1%.*}"' _ {} \;
+}
+
+7zx()
+{
+7z x "$1" -o"${1%.*}"
+}
+
+tarxall()
+{
+find -maxdepth 1 -name '*.tar.gz' -o -name '*.tar' -exec sh -c 'tar xf "$1" -C "${1%.*}"' _ {} \;
+}
+
+dsa()
+{
+	sudo docker start 56abbecda164
+	sudo docker attach 56abbecda164
+}
+
+rebake()
+{
+	bitbake -c cleanall $1 && bitbake $1
+}
+
+tar_bz()
+{
+	time tar -l lbzip2 -xvf $1 -C .
+}
+
+#######################################
+# vmware
+#######################################
+
+alias mnt_host='sudo vmhgfs-fuse .host:/ /mnt/hgfs/ -o allow_other -o uid=1000'
+alias mnt_carib='sshfs seokhoon.yoon@10.177.226.38: ~/remote/caribbean/'
+alias mnt_lgcloud='sshfs seokhoon.yoon@10.178.85.211: ~/remote/lg_cloud_211'
+
+echo "============================================================"
+echo "$DEV_SHORTCUT_NAME version = $DEV_SHORTCUT_VER"
+echo "============================================================"

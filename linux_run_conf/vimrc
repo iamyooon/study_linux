@@ -48,25 +48,27 @@ let g:SrcExpl_jumpKey = "<ENTER>"
 let g:SrcExpl_gobackKey = "<SPACE>"
 
 "일치하는 태그가 존재하는 다음 파일로 이동하기
-map <F3> :tnext^M
+map <F3> :tnext
+
 "이전 파일로 이동하기
-map <F2> :tprevious^M
+map <F2> :tprevious
+
 "변경사항 저장하기
-map <F4> :w^M
+map <F4> :w
 
 "붙여넣기모드 활성화
-map <C-P>y :set paste^M
-map <C-P>n :set nopaste^M
+map <C-P>y :set paste
+map <C-P>n :set nopaste
 
 "라인번호 활성화
-map <C-N>y :set nu^M
-map <C-N>n :set nonu^M
+map <C-N>y :set nu
+map <C-N>n :set nonu
 
 "라인 첫글자 +,- 지우기
-map <C-D>+ :%s/^+//g^M
-map <C-D>- :%s/^-//g^M
+map <C-D>+ :%s/^+//g
+map <C-D>- :%s/^-//g
+map <C-I>i :r! echo "Commented by SeokHoon.Yoon(sh.yoon@lge.com)"
 
-map <C-I>i :r! echo "Commented by SeokHoon.Yoon(sh.yoon@lge.com)"^M
 
 
 set csprg=/usr/bin/cscope
