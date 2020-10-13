@@ -1,5 +1,5 @@
 DEV_SHORTCUT_NAME=".set_devtool_shortcut"
-DEV_SHORTCUT_VER="1.0.2"
+DEV_SHORTCUT_VER="1.2.0"
 
 alias gs='git status'
 alias gsm='git status | more'
@@ -37,7 +37,7 @@ alias rreboot='reboot'
 alias reboot='reboot --help'
 
 ###################################
-# v2csm 
+# v2csm
 ###################################
 alias v2dockerrun='docker run -v $HOME:/home/$USER --privileged=true -it --name $V2CONTAINER $V2DOCKERIMG:$V2DOCKERTAG /bin/bash'
 alias v2run='V2CONTAINER="v2csm_yoon" V2DOCKERIMG="v2csm_dev" V2DOCKERTAG="1.0" v2dockerrun'
@@ -46,33 +46,27 @@ alias cdout='cd out/target/product/gminfo35c'
 
 unzipall()
 {
-find -maxdepth 1 -name '*.zip' -exec sh -c 'unzip -d "${1%.*}" "$1"' _ {} \;
+	find -maxdepth 1 -name '*.zip' -exec sh -c 'unzip -d "${1%.*}" "$1"' _ {} \;
 }
 
 unzipd()
 {
-unzip -d "${1%.*}" "$1"
+	unzip -d "${1%.*}" "$1"
 }
 
 7zxall()
 {
-find -maxdepth 1 -name '*.7z' -exec sh -c '7z x "$1" -o"${1%.*}"' _ {} \;
+	find -maxdepth 1 -name '*.7z' -exec sh -c '7z x "$1" -o"${1%.*}"' _ {} \;
 }
 
 7zx()
 {
-7z x "$1" -o"${1%.*}"
+	7z x "$1" -o"${1%.*}"
 }
 
 tarxall()
 {
-find -maxdepth 1 -name '*.tar.gz' -o -name '*.tar' -exec sh -c 'tar xf "$1" -C "${1%.*}"' _ {} \;
-}
-
-dsa()
-{
-	sudo docker start 56abbecda164
-	sudo docker attach 56abbecda164
+	find -maxdepth 1 -name '*.tar.gz' -o -name '*.tar' -exec sh -c 'tar xf "$1" -C "${1%.*}"' _ {} \;
 }
 
 rebake()
@@ -82,8 +76,69 @@ rebake()
 
 tar_bz()
 {
-	time tar -I lbzip2 -xvf $1 -C .
+	tar -I lbzip2 -xvf $1 -C .
 }
+
+tar_bz_timed()
+{
+	time tar_bz $i
+}
+
+###################################
+# ccic
+###################################
+ccic_img_down()
+{
+	if [ "$2" == "piped" ];then
+		curl -uhkccic:hkccic123! $1 --output -
+	else
+		curl -uhkccic:hkccic123! -O $1
+	fi
+}
+
+ccic_img_down_n_gzunpack()
+{
+	ccic_img_down "$1" "piped" | tar zxv
+}
+
+ccic_img_down_n_gzunpack_timed()
+{
+	time ccic_img_down_n_gzunpack "$1"
+}
+
+ccic_img_down_n_bzunpack()
+{
+	ccic_img_down "$1" "piped" | tar_bz -
+}
+
+ccic_img_down_n_bzunpack_timed()
+{
+	time ccic_img_down_n_bzunpack "$1"
+}
+
+ccic_dsa()
+{
+	sudo docker start 56abbecda164
+	sudo docker attach 56abbecda164
+}
+
+flashing_ccic()
+{
+	./flash_bsp_images.sh -b hkmc-ccic -P $1
+}
+
+alias start_uart='sudo ./uart_muxer.sh -g 11 -b 10 -d /dev/ttyUSB3'
+
+ccic_push_commit_forced()
+{
+	ccic_push_commit $1 -f
+}
+
+ccic_push_commit()
+{
+	git push origin HEAD:refs/for/$1 $2
+}
+
 
 #######################################
 # vmware
