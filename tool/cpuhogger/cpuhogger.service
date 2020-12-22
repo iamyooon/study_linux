@@ -4,7 +4,8 @@ DefaultDependencies=no
 
 [Service]
 Type=simple
-ExecStart=/etc/systemd/scripts/cpuhogger.sh 1
+ExecStart=/study_linux/tool/cpuhogger/cpuhogger
+CPUQuota=10%
 
 [Install]
 WantedBy=early.target
