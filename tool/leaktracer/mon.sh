@@ -34,14 +34,14 @@ hudhmi_setup()
 	systemctl restart hudhmi
 }
 
-start_leaktracer()
+start_leak_monitoring()
 {
 	echo "wewake - start leaktracer"
 
 	kill -n 12 `pidof hudhmi`
 }
 
-capture_leak_report()
+report_leak_info()
 {
 	echo "wewake - capture $1 leak report"
 
@@ -61,8 +61,8 @@ hudhmi_setup_test()
 		echo "wewake - setup failed, leaktracer.so no loaded"
 	fi
 
-	start_leaktracer
-	capture_leak_report test
+	start_leak_monitoring
+	report_leak_info test
 
 	if [ ! -f $PATH_LEAK_OUT ] ; then
 		echo "wewake - setup failed, leaks.out cannot created"
@@ -99,18 +99,22 @@ restore()
 	systemctl restart hudhmi
 }
 
+clear_pre_files()
+{
+	rm /rw_data/hudhmi.status
+	rm /rw_data/hudhmi.smaps
+	rm /log_data/hudhmi.*
+}
+
 mon_start()
 {
 	echo "wewake - start memleak monitor"
 
 	mount -o remount,rw /
+	clear_pre_files
 
-	rm /rw_data/hudhmi.status
-	rm /rw_data/hudhmi.smaps
-	rm /log_data/hudhmi.*
-
-	start_leaktracer
-	capture_leak_report start
+	start_leak_monitoring
+	report_leak_info start
 
 	pid=`pidof hudhmi`
 
@@ -130,7 +134,7 @@ mon_start()
 		if [ "$mem" -gt "$1" ]; then
 			echo "wewake - hudhmi memleak occured!!!"
 
-			capture_leak_report issue
+			report_leak_info issue
 			cp /proc/$pid/maps /log_data/hudhmi.maps.end
 			cp $PATH_LEAK_OUT /log_data/hudhmi.leaks.out.end
 
