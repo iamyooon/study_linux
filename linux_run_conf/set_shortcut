@@ -1,5 +1,5 @@
 DEV_SHORTCUT_NAME=".set_devtool_shortcut"
-DEV_SHORTCUT_VER="1.2.0"
+DEV_SHORTCUT_VER="1.2.1"
 
 alias gs='git status'
 alias gsm='git status | more'

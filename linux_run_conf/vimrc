@@ -18,7 +18,7 @@ set csto=0
 set cst
 set nocsverb
 if filereadable("./cscope.out")
-        cs add cscope.out
+        cs add ./cscope.out
 endif
 set csverb
 
@@ -81,7 +81,7 @@ set smartindent
 set hlsearch
 
 if filereadable("./cscope.out")
-	cs add cscope.out
+	cs add ./cscope.out
 else 
 	cs add /home/iamyooon/work/000-kernel/mainline_k/cscope.out
 "	cs add /home/iamyooon/work/100.android/platform/TCC8930/01.SourceCode/kernel/cscope.out

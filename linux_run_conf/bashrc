@@ -166,3 +166,7 @@ export PYKDUMPPATH=$CRASHTOOL_PATH/py:$CRASHTOOL_PATH/LinuxDump
 export PATH=~/bin:$PATH
 export PATH=/home/seokhoon.yoon/ccic/devtool:$PATH
 export PATH=/home/seokhoon.yoon/ccic/devtool/timeline_generator:$PATH
+export PATH=$PATH:/home/seokhoon.yoon/work/2021/qnx/vendor/nvidia//toolchains/tegra-4.9-nv/usr/bin/aarch64-gnu-linux/
+QNX_TARGET=/home/seokhoon.yoon/work/2021/qnx/vendor/nvidia/toolchains/qnx_sdp/target/qnx7
+QNX_HOST=/home/seokhoon.yoon/work/2021/qnx/vendor/nvidia/toolchains/qnx_sdp/host/linux/x86_64
+
