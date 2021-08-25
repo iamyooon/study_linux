@@ -1,11 +1,3 @@
-CC=gcc
-CFLAGS=-fstack-protector-strong -Wall -g
-SAMPLE=ssp
+include ../../basic.mk
 
-all:  $(SAMPLE)
-
-$(SAMPLE):
-	$(CC) $(CFLAGS) ssp.c -o $@
-
-clean:
-	rm $(SAMPLE)
+CFLAGS += -fstack-protector -Wall -g --save-temps
