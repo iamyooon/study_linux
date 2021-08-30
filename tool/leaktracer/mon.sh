@@ -1,18 +1,31 @@
 #!/bin/sh
 
-PATH_LEAK_OUT="/ccos/apps/hmi/hudhmi/leaks.out"
+PATH_LEAK_OUT_START="/ccos/apps/hmi/hudhmi/leaks.out.start"
+PATH_LEAK_OUT_END="/ccos/apps/hmi/hudhmi/leaks.out.end"
+PATH_LEAK_OUT_CP_START="/log_data/hudhmi.leaks.out.start"
+PATH_LEAK_OUT_CP_END="/log_data/hudhmi.leaks.out.end"
+PATH_WORKING_DIR="/rw_data/hudhmi.leakinfo"
 
-leaktracer_setup()
+clean_prev_files()
 {
-	echo "wewake - leaktracer setup"
 
-	cp libleaktracer.so /usr/lib
-	sync
+	filelist="/rw_data/hudhmi.status \
+		/rw_data/hudhmi.smaps \
+		/log_data/hudhmi.* \
+		/ccos/apps/hmi/hudhmi/leaks.out"
+
+	for file in $filelist; do
+		if [ -f $file ]; then
+			rm $file
+		fi
+	done
 }
 
-hudhmi_setup()
+env_setup()
 {
-	echo "wewake - hudhmi setup"
+	echo "wewake - setup env"
+
+	mount -o remount,rw /
 
 	systemctl stop hudhmi
 
@@ -25,63 +38,31 @@ hudhmi_setup()
 	cp start.sh /ccos/apps/hmi/hudhmi/start.sh
 	chmod 777 start.sh
 
-	leaktracer_setup
+	cp libleaktracer.so /usr/lib
+
+	mkdir $PATH_WORKING_DIR
 
 	sync
 
-	ls -al /ccos/apps/hmi/hudhmi/hudhmi /ccos/apps/hmi/hudhmi/start.sh /usr/lib/libleaktracer.so
+	ls -al /ccos/apps/hmi/hudhmi/hudhmi \
+		/ccos/apps/hmi/hudhmi/start.sh \
+		/usr/lib/libleaktracer.so
 
 	systemctl restart hudhmi
-}
 
-start_leak_monitoring()
-{
-	echo "wewake - start leaktracer"
-
-	kill -n 12 `pidof hudhmi`
-}
-
-report_leak_info()
-{
-	echo "wewake - capture $1 leak report"
-
-	if [ -f $PATH_LEAK_OUT ]; then
-		rm $PATH_LEAK_OUT
-	fi
-	kill -n 30 `pidof hudhmi`
-	sleep 3
-}
-
-hudhmi_setup_test()
-{
-	echo "wewake - hudhmi setup test"
+	echo "wewake - setup test"
 
 	grep "leaktracer" /proc/`pidof hudhmi`/maps
 	if [ "$?" == "1" ]; then
 		echo "wewake - setup failed, leaktracer.so no loaded"
+		exit -1
 	fi
 
-	start_leak_monitoring
-	report_leak_info test
+	start_and_report_leak "hudhmi"
+	test_monitoring_work_or_not 3
+	clean_prev_files
 
-	if [ ! -f $PATH_LEAK_OUT ] ; then
-		echo "wewake - setup failed, leaks.out cannot created"
-	else
-		rm $PATH_LEAK_OUT
-	fi
-
-	echo "wewake - hudhmi setup test success"
-}
-
-env_setup()
-{
-
-	echo "wewake - setup env"
-
-	mount -o remount,rw /
-
-	hudhmi_setup
-	hudhmi_setup_test
+	echo "wewake - setup done"
 }
 
 restore()
@@ -91,57 +72,77 @@ restore()
 	mount -o remount,rw /
 
 	systemctl stop hudhmi
+
+	echo "wewake - before"
+	ls -al /ccos/apps/hmi/hudhmi/hudhmi* /ccos/apps/hmi/hudhmi/start.sh*
+
 	mv /ccos/apps/hmi/hudhmi/hudhmi.org /ccos/apps/hmi/hudhmi/hudhmi
 	mv /ccos/apps/hmi/hudhmi/start.sh.org /ccos/apps/hmi/hudhmi/start.sh
 	sync
 
-	ls -al /ccos/apps/hmi/hudhmi/hudhmi /ccos/apps/hmi/hudhmi/start.sh
+	echo "wewake - after"
+	ls -al /ccos/apps/hmi/hudhmi/hudhmi* /ccos/apps/hmi/hudhmi/start.sh*
+
 	systemctl restart hudhmi
 }
 
-clear_pre_files()
+test_monitoring_work_or_not()
 {
-	rm /rw_data/hudhmi.status
-	rm /rw_data/hudhmi.smaps
-	rm /log_data/hudhmi.*
+	sleep $1
+
+	if [ ! -f /ccos/apps/hmi/hudhmi/leaks.out ] ; then
+		echo "wewake - report failed, leaks.out cannot created!!!"
+		echo "wewake - signal is may blocked by hudhmi, please restart hudhmi(systemctl restart hudhmi)"
+		exit -1
+	fi
+
+	echo "wewake - report success, leaks.out can created"
+}
+
+start_and_report_leak()
+{
+	process="$1"
+	pid=`pidof $process`
+	kill -n 12 $pid
+	kill -n 30 $pid
 }
 
 mon_start()
 {
 	echo "wewake - start memleak monitor"
-
 	mount -o remount,rw /
-	clear_pre_files
 
-	start_leak_monitoring
-	report_leak_info start
+	clean_prev_files
+	start_and_report_leak "hudhmi"
+	test_monitoring_work_or_not 3
+	clean_prev_files
 
-	pid=`pidof hudhmi`
-
-	cp /proc/$pid/maps /log_data/hudhmi.maps.start
-	cp $PATH_LEAK_OUT /log_data/hudhmi.leaks.out.start
+	cp /proc/$pid/maps $PATH_WORKING_DIR/hudhmi.$pid.maps.start
+	cp /proc/$pid/smaps $PATH_WORKING_DIR/hudhmi.$pid.smaps.start
+	cp /proc/$pid/status $PATH_WORKING_DIR/hudhmi.$pid.staus.start
 
 	while true; do
 		pid=`pidof hudhmi`
-
-		cat /proc/$pid/status >> /rw_data/hudhmi.status
-		cat /proc/$pid/smaps >> /rw_data/hudhmi.smaps
-
 		mem=`ps -Ao comm,pid,rss | grep hudhmi | tr -s ' ' | cut -d " " -f3`
 
 		echo "PID($pid),RSS($mem)"
 
+		cp /proc/$pid/maps $PATH_WORKING_DIR/hudhmi.$pid.maps.last
+		cp /proc/$pid/smaps $PATH_WORKING_DIR/hudhmi.$pid.smaps.last
+		cp /proc/$pid/status $PATH_WORKING_DIR/hudhmi.$pid.staus.last
+
 		if [ "$mem" -gt "$1" ]; then
 			echo "wewake - hudhmi memleak occured!!!"
 
-			report_leak_info issue
-			cp /proc/$pid/maps /log_data/hudhmi.maps.end
-			cp $PATH_LEAK_OUT /log_data/hudhmi.leaks.out.end
+			kill -n 30 $pid
 
-			ls -al /log_data/hudhmi.*
-			ls -al /rw_data/hudhmi.*
-			echo "wewake - memleak monitor end"
-			exit
+			cp /proc/$pid/maps $PATH_WORKING_DIR/hudhmi.$pid.maps.end
+			cp /proc/$pid/smaps $PATH_WORKING_DIR/hudhmi.$pid.smaps.end
+			cp /proc/$pid/status $PATH_WORKING_DIR/hudhmi.$pid.staus.end
+
+			ls -al $PATH_WORKING_DIR \
+				/ccos/apps/hmi/hudhmi/leaks.out
+			exit 0
 		fi
 		sleep 10
 	done
