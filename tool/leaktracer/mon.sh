@@ -6,6 +6,15 @@ PATH_LEAK_OUT_CP_START="/log_data/hudhmi.leaks.out.start"
 PATH_LEAK_OUT_CP_END="/log_data/hudhmi.leaks.out.end"
 PATH_WORKING_DIR="/rw_data/hudhmi.leakinfo"
 
+cp_proc_meminfo()
+{
+	PID="$1"
+	POSTFIX="$2"
+	cp /proc/$PID/maps $PATH_WORKING_DIR/hudhmi.$PID.maps.$POSTFIX
+	cp /proc/$PID/smaps $PATH_WORKING_DIR/hudhmi.$PID.smaps.$POSTFIX
+	cp /proc/$PID/status $PATH_WORKING_DIR/hudhmi.$PID.staus.$POSTFIX
+}
+
 clean_prev_files()
 {
 
@@ -117,28 +126,23 @@ mon_start()
 	test_monitoring_work_or_not 3
 	clean_prev_files
 
-	cp /proc/$pid/maps $PATH_WORKING_DIR/hudhmi.$pid.maps.start
-	cp /proc/$pid/smaps $PATH_WORKING_DIR/hudhmi.$pid.smaps.start
-	cp /proc/$pid/status $PATH_WORKING_DIR/hudhmi.$pid.staus.start
+	start_pid=`pidof hudhmi`
+
+	cp_proc_meminfo "$start_pid" "start"
 
 	while true; do
 		pid=`pidof hudhmi`
 		mem=`ps -Ao comm,pid,rss | grep hudhmi | tr -s ' ' | cut -d " " -f3`
 
-		echo "PID($pid),RSS($mem)"
+		echo "StartPID($start_pid),CurrentPID($pid),RSS($mem)"
 
-		cp /proc/$pid/maps $PATH_WORKING_DIR/hudhmi.$pid.maps.last
-		cp /proc/$pid/smaps $PATH_WORKING_DIR/hudhmi.$pid.smaps.last
-		cp /proc/$pid/status $PATH_WORKING_DIR/hudhmi.$pid.staus.last
+		cp_proc_meminfo "$pid" "last"
 
 		if [ "$mem" -gt "$1" ]; then
 			echo "wewake - hudhmi memleak occured!!!"
 
 			kill -n 30 $pid
-
-			cp /proc/$pid/maps $PATH_WORKING_DIR/hudhmi.$pid.maps.end
-			cp /proc/$pid/smaps $PATH_WORKING_DIR/hudhmi.$pid.smaps.end
-			cp /proc/$pid/status $PATH_WORKING_DIR/hudhmi.$pid.staus.end
+			cp_proc_meminfo "$pid" "end"
 
 			ls -al $PATH_WORKING_DIR \
 				/ccos/apps/hmi/hudhmi/leaks.out
