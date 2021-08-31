@@ -1,5 +1,6 @@
 #!/bin/sh
 
+MONITORING_START_RSS=""
 PATH_LEAK_OUT_START="/ccos/apps/hmi/hudhmi/leaks.out.start"
 PATH_LEAK_OUT_END="/ccos/apps/hmi/hudhmi/leaks.out.end"
 PATH_LEAK_OUT_CP_START="/log_data/hudhmi.leaks.out.start"
@@ -118,27 +119,35 @@ start_and_report_leak()
 
 mon_start()
 {
-	echo "wewake - start memleak monitor"
-	mount -o remount,rw /
-
-	clean_prev_files
-	start_and_report_leak "hudhmi"
-	test_monitoring_work_or_not 3
-	clean_prev_files
+	END_RSS="$1"
+	START_RSS="$2"
+	MONITORING_STARTED="0"
 
 	start_pid=`pidof hudhmi`
+	echo "wewake - start memleak monitor script"
 
+	mount -o remount,rw /
+	clean_prev_files
 	cp_proc_meminfo "$start_pid" "start"
 
 	while true; do
 		pid=`pidof hudhmi`
-		mem=`ps -Ao comm,pid,rss | grep hudhmi | tr -s ' ' | cut -d " " -f3`
+		current_mem=`ps -Ao comm,pid,rss | grep hudhmi | tr -s ' ' | cut -d " " -f3`
 
-		echo "StartPID($start_pid),CurrentPID($pid),RSS($mem)"
+		echo "StartPID($start_pid),CurrentPID($pid),RSS($current_mem)"
 
 		cp_proc_meminfo "$pid" "last"
 
-		if [ "$mem" -gt "$1" ]; then
+		if [ "$MONITORING_STARTED" == "0" ]; then
+			if [ "$current_mem" -gt "$START_RSS" ]; then
+				echo "wewake - Start to collect memory allocation info from now"
+				echo "wewake - current rss($current_mem) is greater than start_rss($START_RSS)"
+				start_and_report_leak "hudhmi"
+				test_monitoring_work_or_not 3
+				clean_prev_files
+				MONITORING_STARTED="1"
+			fi
+		elif [ "$current_mem" -gt "$END_RSS" ]; then
 			echo "wewake - hudhmi memleak occured!!!"
 
 			kill -n 30 $pid
@@ -157,5 +166,17 @@ if [ "$1" == "setup" ]; then
 elif [ "$1" == "restore" ]; then
 	restore
 else
-	mon_start "$1"
+	if [ "$1" == "" ]; then
+		echo "wewake - invalid arguments"
+		exit -1
+	fi
+
+	if [ "$2" == "" ]; then
+		echo "wewake - Start rss value is not given. set startrss as 0"
+		MONITORING_START_RSS="0"
+	else
+		MONITORING_START_RSS="$2"
+	fi
+
+	mon_start "$1" "$MONITORING_START_RSS"
 fi
