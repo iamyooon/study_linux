@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>640</width>
+    <height>480</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QGridLayout" name="gridLayout">
+    <item row="3" column="1">
+     <widget class="QTextBrowser" name="dev1_io_txtbrowser"/>
+    </item>
+    <item row="3" column="2">
+     <widget class="QTextBrowser" name="dev2_io_txtbrowser"/>
+    </item>
+    <item row="1" column="1">
+     <widget class="QTextBrowser" name="dev1_cpu_textBrowser"/>
+    </item>
+    <item row="2" column="1">
+     <widget class="QTextBrowser" name="dev1_mem_textBrowser"/>
+    </item>
+    <item row="1" column="2">
+     <widget class="QTextBrowser" name="dev2_cpu_textBrowser"/>
+    </item>
+    <item row="2" column="2">
+     <widget class="QTextBrowser" name="dev2_mem_textBrowse"/>
+    </item>
+    <item row="1" column="0">
+     <widget class="QPushButton" name="cpu_pushButton">
+      <property name="text">
+       <string>CPU</string>
+      </property>
+     </widget>
+    </item>
+    <item row="5" column="1">
+     <widget class="QTextBrowser" name="dev1_network_textBrowser"/>
+    </item>
+    <item row="4" column="2">
+     <widget class="QTextBrowser" name="dev2_gpu_textBrowser"/>
+    </item>
+    <item row="4" column="1">
+     <widget class="QTextBrowser" name="dev1_gpu_textBrowser"/>
+    </item>
+    <item row="5" column="2">
+     <widget class="QTextBrowser" name="dev2_network_textBrowser"/>
+    </item>
+    <item row="2" column="0">
+     <widget class="QPushButton" name="mem_pushButton">
+      <property name="text">
+       <string>MEM</string>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="0">
+     <widget class="QPushButton" name="gpu_pushButton">
+      <property name="text">
+       <string>GPU</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="0">
+     <widget class="QPushButton" name="io_pushButton">
+      <property name="text">
+       <string>I/O</string>
+      </property>
+     </widget>
+    </item>
+    <item row="5" column="0">
+     <widget class="QPushButton" name="network_pushButton">
+      <property name="text">
+       <string>Network</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="1">
+     <widget class="QPushButton" name="dev1_pushButton">
+      <property name="text">
+       <string>Dev1</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="2">
+     <widget class="QPushButton" name="dev2_pushButton">
+      <property name="text">
+       <string>Dev2</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="0">
+     <widget class="QPushButton" name="all_pushButton">
+      <property name="text">
+       <string>All</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="1">
+     <widget class="QPushButton" name="pushButton_runScript">
+      <property name="text">
+       <string>Run</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="2">
+     <widget class="QPushButton" name="pushButton_quit">
+      <property name="text">
+       <string>Quit</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
