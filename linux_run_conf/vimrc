@@ -22,6 +22,27 @@ if filereadable("./cscope.out")
 endif
 set csverb
 
+
+" for all dev
+"set shiftwidth=4
+"set ts=4
+"set expandtab
+"set softtabstop=4
+
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+"for ccu2 project
+"
+"https://www.lesstif.com/system-admin/vim-tab-space-4-18220149.html
+"set smartindent
+"set tabstop=4
+"set expandtab
+"set shiftwidth=4 " >> 또는 << 키로 들여 쓰기 할때 스페이스의 갯수. 기본값 8
+"https://stackoverflow.com/questions/1675688/make-vim-show-all-white-spaces-as-a-character"
+"set list
+"set listchars=space:·
+"set listchars+=eol:$,tab:!·,trail:~,extends:>,precedes:<
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
 filetype on
 nmap <F7> :TlistToggle<CR>
 let Tlist_Ctags_Cmd = "/usr/bin/ctags"

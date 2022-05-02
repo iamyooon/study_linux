@@ -5,16 +5,16 @@ int parse_opt(int argc, char **argv)
 {
         int c;
         opterr = 0;
-        while ((c = getopt(argc, argv, "a:b:c")) != -1){
+        while ((c = getopt(argc, argv, "a:e:d:")) != -1){
                 switch (c)
                 {
                         case 'a':
                                 printf("option=>%c arg=>%s\n", c, optarg);
                                 break;
-                        case 'b':
+                        case 'e':
                                 printf("option=>%c arg=>%s\n", c, optarg);
                                 break;
-                        case 'c':
+                        case 'd':
                                 printf("option=>%c arg=>%s\n", c, optarg);
                                 break;
                         default:

@@ -148,6 +148,19 @@ alias mnt_host='sudo vmhgfs-fuse .host:/ /mnt/hgfs/ -o allow_other -o uid=1000'
 alias mnt_carib='sshfs seokhoon.yoon@10.177.226.38: ~/remote/caribbean/'
 alias mnt_lgcloud='sshfs seokhoon.yoon@10.178.85.211: ~/remote/lg_cloud_211'
 
+alias ccu2_compile_adapapp_in_fullsrc='./build_target.sh mobilgenes32g_native'
+alias ccu2_kill_all='sudo pkill -f -9 install'
+alias ccu2_local_build='cmake .. && make -j8 && make install'
+alias ccu2_local_clean_build='cd .. && rm -rf build/* && cd build/ && cmake .. && make -j8 && make install'
+alias ccu2_netconf='sudo ifconfig eth0 inet 10.0.6.0 broadcast 224.244.24.245 netmask 255.255.255.0 up'
+alias ccu2_refresh_dhcp='sudo dhclient -r && sudo dhclient'
+alias ccu2_run_local='sudo /adar/install/bin/mga_emd ARA_ROOT=/adar/install/'
+
+ccu2_push_commit()
+{
+	git push vgit_as HEAD:refs/for/$1 $2
+}
+
 echo "============================================================"
 echo "$DEV_SHORTCUT_NAME version = $DEV_SHORTCUT_VER"
 echo "============================================================"
