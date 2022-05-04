@@ -8,13 +8,14 @@ bool forced_update = false;
 
 void set_mode(const char* OptArg)
 {
-    cout << "size=" << sizeof("true_value") << std::endl;
-    cout << "size=" << sizeof(OptArg) << std::endl;
-    if (strncmp("true_value", OptArg, sizeof("true_value"))==0) {
+    cout << "@OptArg's size=" << sizeof(OptArg) << std::endl;
+    if (strncmp("true", OptArg, sizeof("true"))==0) {
         cout << "true" << std::endl;
         forced_update = true;
-    } else
+    } else {
+        cout << "false" << std::endl;
         forced_update = false;
+    }
 }
 
 void parse_opt(int argc, char** argv)
