@@ -1,56 +1,85 @@
 main()
 -> set cb(control block)
-   cb->sin.ss_family = PF_INET
-   cb->port = htobe16(7174)
-
+   alloce memory for rping_cb
+   setting cb's server, size, count, verbose, validate, self_create_gp
+   setting cb's sin.ss_faimily, port as PF_INET, htobe16(7174)
 -> cb->cm_channel = create_first_event_channel()
 ->-> rdma_create_event_channel()
 ->->-> ucma_init()
 ->->->-> check_abi_version();
-->->->-> sync_devices_list();
-->->->->-> new_list = ibv_get_device_list(&numb_dev);
+->->->-> dev_list = ibv_get_device_list(&numb_dev);
+->->->->-> if (!initialized) ibverbs_init()
+->->->->-> num_devices = ibverbs_get_device_list(&device_list);
+		ret = find_sysfs_devs_nl(&sysfs_list);
+		list_for_each_safe(device_list, vdev, tmp, entry) {
+			list_for_each(&sysfs_list, sysfs_dev, entry) {
+				if (same_sysfs_dev(vdev->sysfs, sysfs_dev)) {
+					old_sysfs = sysfs_dev;
+					break;
+			if (old_sysfs)
+				list_del(&old_sysfs->entry);
+				free(old_sysfs);
+				num_devices++;
+			else
+				list_del(&vdev->entry);
+				ibverbs_device_put(&vdev->device);
+		try_all_drivers(&sysfs_list, device_list, &num_devices);
+		if (list_empty(&sysfs_list) || drivers_loaded) goto out;
+		load_drivers();
+		drivers_loaded = 1;
+		try_all_drivers(&sysfs_list, device_list, &num_devices);
+->->->->-> l = calloc(num_devices + 1, sizeof (struct ibv_device *));
+->->->->-> list_for_each(&device_list, device, entry) {
+		l[i] = &device->device;
+		ibverbs_device_hold(l[i]);
+		i++;
+->->->->-> if (num) *num = num_devices;
+->->->-> setting cma_dev_{array, cnt}
+	cma_dev_array = calloc(dev_cnt, sizeof(*cma_dev_array));
+	for (i = 0; dev_list[i]; i++) cma_dev_array[i].guid = ibv_get_device_guid(dev_list[i]);
+	cma_dev_cnt = dev_cnt;
 ->->->-> ucma_set_af_ib_support();
 ->->->->-> rdma_create_id(NULL, &id, NULL, RDMA_PS_IB);
-->->->->-> sib.sib_family = AF_IB;
-->->->->-> sib.sib_sid = htobe64(RDMA_IB_IP_PS_TCP);
-->->->->-> sib.sib_sid_mask = htobe64(RDMA_IB_IP_PS_MASK);
+->->->->-> sib's sib_family, sib_sid, sib_sid_mask as AF_IB, htobe64(RDMA_IB_IP_PS_TCP), htobe64(RDMA_IB_IP_PS_MASK)
 ->->->->-> af_ib_support = 1;
 ->->->->-> ret = rdma_bind_addr(id, (struct sockaddr *) &sib);
 ->->->->->-> addrlen = ucma_addrlen(addr);
 ->->->->->-> if (af_ib_support) return rdma_bind_addr2(id, addr, addrlen);
-->->->->->->-> CMA_INIT_CMD(&cmd, sizeof cmd, BIND);
-->->->->->->-> id_priv = container_of(id, struct cma_id_private, id);
-->->->->->->-> cmd.id = id_priv->handle;
-->->->->->->-> cmd.addr_size = addrlen;
-->->->->->->-> memcpy(&cmd.addr, addr, addrlen);
-->->->->->->-> ret = write(id->channel->fd, &cmd, sizeof cmd);
-->->->->->->-> ret = ucma_query_addr(id);
-->->->->->->->-> CMA_INIT_CMD_RESP(&cmd, sizeof cmd, QUERY, &resp, sizeof resp);
-->->->->->->->-> id_priv = container_of(id, struct cma_id_private, id);
-->->->->->->->-> cmd.id = id_priv->handle;
-->->->->->->->-> cmd.option = UCMA_QUERY_ADDR;
-->->->->->->->-> resp.ibdev_index = UCMA_INVALID_IB_INDEX;
-->->->->->->->-> ret = write(id->channel->fd, &cmd, sizeof cmd);
+->->->->->->-> setting cmd's cmd, in, id, addr as UCMA_CMD_BIND, sizeof(cmd) - sizeof(struct ucma_abi_cmd_hdr), id's id_priv->handle, addr
+->->->->->->-> write(id->channel->fd, &cmd, sizeof cmd);
+->->->->->->-> ucma_query_addr(id);
+->->->->->->->-> setting cmd's cmd, in, id, option as UCMA_CMD_QUERY, sizeof(cmd) - sizeof(struct ucma_abi_cmd_hdr), id's id_priv->handle, UCMA_QUERY_ADDR
+->->->->->->->-> setting cmd's out, response as sizeof(resp), &resp
+->->->->->->->-> write(id->channel->fd, &cmd, sizeof cmd);
 ->->->->->->->-> memcpy(&id->route.addr.src_addr, &resp.src_addr, resp.src_size);
 ->->->->->->->-> memcpy(&id->route.addr.dst_addr, &resp.dst_addr, resp.dst_size);
-->->->->->->->-> if (!id_priv->cma_dev && resp.node_guid) {
+->->->->->->->-> if (!id_priv->cma_dev && resp.node_guid)
 ->->->->->->->-> ret = ucma_get_device(id_priv, resp.node_guid,
-->->->->->->->->-> pthread_mutex_lock(&mut);
-->->->->->->->->-> cma_dev = ucma_get_cma_device(guid, idx);
+->->->->->->->->-> for (i = 0; i < cma_dev_cnt; i++)
+		     cma_dev = &cma_dev_array[i];
+		     if (cma_dev->guid == guid) goto match;
 ->->->->->->->->-> ret = ucma_init_device(cma_dev);
-->->->->->->->->->-> cma_dev->verbs = ibv_open_device(cma_dev->dev);
-->->->->->->->->->-> ret = ibv_query_device(cma_dev->verbs, &attr);
-->->->->->->->->->->-> rxe_query_device(cma_dev->verbs, &attr);
-->->->->->->->->->-> cma_dev->port_cnt = attr.phys_port_cnt;
-->->->->->->->->->-> cma_dev->max_qpsize = attr.max_qp_wr;
-->->->->->->->->->-> cma_dev->max_initiator_depth = (uint8_t) attr.max_qp_init_rd_atom;
-->->->->->->->->->-> cma_dev->max_responder_resources = (uint8_t) attr.max_qp_rd_atom;
+			cma_dev->verbs = ucma_open_device(cma_dev->guid);
+			ibv_query_device(cma_dev->verbs, &attr);
+			cma_dev->port = malloc(sizeof(*cma_dev->port) * attr.phys_port_cnt);
+			for (i = 1; i <= attr.phys_port_cnt; i++)
+				if (ibv_query_port(cma_dev->verbs, i, &port_attr))
+					cma_dev->port[i - 1].link_layer = IBV_LINK_LAYER_UNSPECIFIED;
+				else
+					cma_dev->port[i - 1].link_layer = port_attr.link_layer;
+			cma_dev->port_cnt = attr.phys_port_cnt;
+			cma_dev->max_qpsize = attr.max_qp_wr;
+			cma_dev->max_initiator_depth = (uint8_t) attr.max_qp_init_rd_atom;
+			cma_dev->max_responder_resources = (uint8_t) attr.max_qp_rd_atom;
+			cma_init_cnt++;
 ->->->->->->->->-> id_priv->cma_dev = cma_dev;
 ->->->->->->->->-> id_priv->id.verbs = cma_dev->verbs;
 ->->->->->->->->-> id_priv->id.pd = cma_dev->pd;
 ->->->->->->->-> id->port_num = resp.port_num;
 ->->->->->->->-> id->route.addr.addr.ibaddr.pkey = resp.pkey;
+->->->->-> af_ib_support = !ret;
 ->->->->-> rdma_destroy_id(id);
+->->->-> ibv_free_device_list(dev_list);
 ->->-> channel = malloc(sizeof(*channel));
 ->->-> channel->fd = open_cdev(dev_name, dev_cdev);
 ->->->->// ./buildlib/config.h.in:16:#define RDMA_CDEV_DIR "/dev/infiniband"
@@ -60,58 +89,95 @@ main()
 ->->->->-> return open(path, O_RDWR | O_CLOEXEC)
 
 -> rdma_create_id(cb->cm_channel, &cb->cm_id, cb, RDMA_PS_TCP) /PS -> port space)
+->-> qp_type = (ps == RDMA_PS_IPOIB || ps == RDMA_PS_UDP) ?  IBV_QPT_UD : IBV_QPT_RC;
 ->-> rdma_create_id2(channel, id, context, ps, qp_type)
 ->->-> ucma_init();
+->->->-> if(cmd_dev_cnt) return 0;
 ->->-> id_priv = ucma_alloc_id(channel, context, ps, qp_type);
 ->->->-> id_priv = calloc(1, sizeof(*id_priv));
-		id_priv->id.context = context; id_priv->id.ps = ps; id_priv->id.qp_type = qp_type; id_priv->handle = 0xFFFFFFFF;
-		if (!channel) { id_priv->id.channel = rdma_create_event_channel(); id_priv->sync = 1;
-		} else { id_priv->id.channel = channel; }
+		id_priv's id.context, id.ps, id.qp_type, handle as context, ps, qp_type, 0xFFFFFFFF
+		if (!channel) id_priv->id.channel = rdma_create_event_channel(); id_priv->sync = 1;
+		else id_priv->id.channel = channel;
+		return id_priv;
 ->->->-> cmd.out = sizeof(resp) cmd.response = &resp cmd.uid = (uintptr_t) id_priv; cmd.ps = ps; cmd.qp_type = qp_type;
+->->->-> setting cmd's cmd, in, uid, ps, qp_type as UCMA_CMD_CREATE_ID, sizeof(cmd) - sizeof(struct ucma_abi_cmd_hdr), id_priv, ps, qp_type
+->->->-> setting cmd's out, response as sizeof(resp), &resp
 ->->->-> write(id_priv->id.channel->fd, &cmd, sizeof cmd);
-->->->-> id_priv->handle = resp.id;
+->->->-> id_priv->handle = resp.id; // struct cmd_id_private *id_priv
 ->->->-> ucma_insert_id(id_priv);
-->->->-> *id = &id_priv->id;
-
+->->->-> *id = &id_priv->id; // struct rdma_cm_id** id
 -> pthread_create(&cb->cmthread, NULL, cm_thread, cb);
-->-> while (1) {
-->-> ret = rdma_get_cm_event(cb->cm_channel, &event);
-->->-> ret = ucma_init();
-->->->-> ret = check_abi_version();
-->->->-> ret = sync_devices_list();
-->->->-> ucma_set_af_ib_support();
-->-> ret = rping_cma_event_handler(event->id, event);
-->->-> switch (event->event) {
-->->-> case RDMA_CM_EVENT_ADDR_RESOLVED:
-->->-> 	cb->state = ADDR_RESOLVED;
-->->-> 	ret = rdma_resolve_route(cma_id, 2000);
-->->-> case RDMA_CM_EVENT_ROUTE_RESOLVED:
-->->-> 	cb->state = ROUTE_RESOLVED;
-->->->  sem_post(&cb->sem);
-->->-> case RDMA_CM_EVENT_CONNECT_REQUEST:
-->->-> 	cb->state = CONNECT_REQUEST;
-->->-> 	cb->child_cm_id = cma_id;
-->->->  sem_post(&cb->sem);
-->->-> case RDMA_CM_EVENT_CONNECT_RESPONSE:
-->->-> 	DEBUG_LOG("CONNECT_RESPONSE\n");
-->->-> 	cb->state = CONNECTED;
-->->->  sem_post(&cb->sem);
-->->-> case RDMA_CM_EVENT_ESTABLISHED:
-->->-> 	if (!cb->server) cb->state = CONNECTED;
-->->->  sem_post(&cb->sem);
-->->-> case RDMA_CM_EVENT_ADDR_ERROR:
-->->-> case RDMA_CM_EVENT_ROUTE_ERROR:
-->->-> case RDMA_CM_EVENT_CONNECT_ERROR:
-->->-> case RDMA_CM_EVENT_UNREACHABLE:
-->->-> case RDMA_CM_EVENT_REJECTED:
-->->-> case RDMA_CM_EVENT_DISCONNECTED:
-->->-> 	cb->state = DISCONNECTED;
-->->-> case RDMA_CM_EVENT_DEVICE_REMOVAL:
-->->-> 	cb->state = ERROR;
-->-> rdma_ack_cm_event(event);
-->-> }
+-> if (cb->server) if (persistent_server) ret = rping_run_persistent_server(cb); else ret = rping_run_server(cb);
+-> else rping_run_client(cb);
 
--> rping_run_persistent_server(cb) or rping_run_server(cb) or rping_run_client(cb);
+##########################################
+# cm_thread (run as thread)
+##########################################
+cm_thread()
+-> while (1) {
+->-> rdma_get_cm_event(cb->cm_channel, &event);
+->->-> ucma_init();
+->->->-> if (cmd_dev_cnt) return 0;
+->->-> evt = malloc(sizeof(*evt));
+       retry:
+	memset(evt, 0, sizeof(*evt));
+	CMA_INIT_CMD_RESP(&cmd, sizeof cmd, GET_EVENT, &resp, sizeof resp);
+	ret = write(channel->fd, &cmd, sizeof cmd);
+	setting evt->event's event, id, status as resp.event, &evt->id_priv->id, resp.status
+	if (resp.uid) evt->id_priv = (void *) (uintptr_t) resp.uid;
+	else { evt->id_priv = ucma_lookup_id(resp.id);
+		if (resp.event != RDMA_CM_EVENT_ESTABLISHED) { ucma_complete_event(evt->id_priv); goto retry;
+	switch (resp.event)
+	case RDMA_CM_EVENT_ADDR_RESOLVED:
+		ucma_process_addr_resolved(evt);
+	case RDMA_CM_EVENT_ROUTE_RESOLVED:
+		ucma_process_route_resolved(evt);
+	case RDMA_CM_EVENT_CONNECT_REQUEST:
+		evt->id_priv = (void *) (uintptr_t) resp.uid;
+		if (ucma_is_ud_qp(evt->id_priv->id.qp_type)) ucma_copy_ud_event(evt, &resp.param.ud);
+		else ucma_copy_conn_event(evt, &resp.param.conn);
+		ucma_process_conn_req(evt, resp.id);
+	case RDMA_CM_EVENT_CONNECT_RESPONSE:
+		ucma_copy_conn_event(evt, &resp.param.conn);
+		if (!evt->id_priv->id.qp) { evt->event.event = RDMA_CM_EVENT_CONNECT_RESPONSE;
+		} else { evt->event.status = ucma_process_conn_resp(evt->id_priv);
+			if (!evt->event.status) evt->event.event = RDMA_CM_EVENT_ESTABLISHED;
+			else { evt->event.event = RDMA_CM_EVENT_CONNECT_ERROR; evt->id_priv->connect_error = 1;
+	case RDMA_CM_EVENT_ESTABLISHED:
+		if (ucma_is_ud_qp(evt->id_priv->id.qp_type)) { ucma_copy_ud_event(evt, &resp.param.ud);
+		ucma_copy_conn_event(evt, &resp.param.conn);
+	case RDMA_CM_EVENT_REJECTED:
+		if (evt->id_priv->connect_error) { ucma_complete_event(evt->id_priv); goto retry;
+		ucma_copy_conn_event(evt, &resp.param.conn);
+		ucma_modify_qp_err(evt->event.id);
+	case RDMA_CM_EVENT_DISCONNECTED:
+		if (evt->id_priv->connect_error) { ucma_complete_event(evt->id_priv); goto retry;
+		ucma_copy_conn_event(evt, &resp.param.conn);
+	case RDMA_CM_EVENT_MULTICAST_JOIN:
+		evt->mc = (void *) (uintptr_t) resp.uid; evt->id_priv = evt->mc->id_priv; evt->event.id = &evt->id_priv->id;
+		ucma_copy_ud_event(evt, &resp.param.ud); evt->event.param.ud.private_data = evt->mc->context; evt->event.status = ucma_process_join(evt);
+		if (evt->event.status) evt->event.event = RDMA_CM_EVENT_MULTICAST_ERROR;
+	case RDMA_CM_EVENT_MULTICAST_ERROR:
+		evt->mc = (void *) (uintptr_t) resp.uid; evt->id_priv = evt->mc->id_priv; evt->event.id = &evt->id_priv->id;
+		evt->event.param.ud.private_data = evt->mc->context;
+	default:
+		evt->id_priv = (void *) (uintptr_t) resp.uid; evt->event.id = &evt->id_priv->id; evt->event.status = resp.status;
+		if (ucma_is_ud_qp(evt->id_priv->id.qp_type)) ucma_copy_ud_event(evt, &resp.param.ud);
+		else ucma_copy_conn_event(evt, &resp.param.conn);
+	}
+	*event = &evt->event;
+->-> rping_cma_event_handler(event->id, event);
+->->-> switch (event->event) {
+->->-> case RDMA_CM_EVENT_ADDR_RESOLVED: cb->state = ADDR_RESOLVED; ret = rdma_resolve_route(cma_id, 2000);
+->->-> case RDMA_CM_EVENT_ROUTE_RESOLVED: cb->state = ROUTE_RESOLVED;
+->->-> case RDMA_CM_EVENT_CONNECT_REQUEST: cb->state = CONNECT_REQUEST; cb->child_cm_id = cma_id;
+->->-> case RDMA_CM_EVENT_CONNECT_RESPONSE: cb->state = CONNECTED;
+->->-> case RDMA_CM_EVENT_ESTABLISHED: if (!cb->server) cb->state = CONNECTED;
+->->-> case RDMA_CM_EVENT_{ADDR_ERROR, ROUTE_ERROR,CONNECT_ERROR,UNREACHABLE,REJECTED,DISCONNECTED : cb->state = DISCONNECTED;
+->->-> case RDMA_CM_EVENT_DEVICE_REMOVAL: cb->state = ERROR;
+->-> rdma_ack_cm_event(event);
+	if (evt->mc) ucma_complete_mc_event(evt->mc);
+	else ucma_complete_event(evt->id_priv);
 
 ##########################################
 # client
@@ -175,7 +241,7 @@ rping_run_client(struct rping_cb *cb)
 ->-> rxe_post_recv(cb->qp, &cb->rq_wr, &bad_wr);
 
 -> pthread_create(&cb->cqthread, NULL, cq_thread, cb);
-->-> while (1) {	
+->-> while (1) {
 ->->  pthread_testcancel();
 ->->  ret = ibv_get_cq_event(cb->channel, &ev_cq, &ev_ctx);
 ->->  ret = ibv_req_notify_cq(cb->cq, 0);
