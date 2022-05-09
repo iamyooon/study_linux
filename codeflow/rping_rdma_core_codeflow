@@ -2,7 +2,7 @@ main()
 -> set cb(control block)
    alloce memory for rping_cb
    setting cb's server, size, count, verbose, validate, self_create_gp
-   setting cb's sin.ss_faimily, port as PF_INET, htobe16(7174)
+   setting cb's sin.ss_family, port as PF_INET, htobe16(7174)
 -> cb->cm_channel = create_first_event_channel()
 ->-> rdma_create_event_channel()
 ->->-> ucma_init()
@@ -55,6 +55,7 @@ main()
 ->->->->->->->-> memcpy(&id->route.addr.dst_addr, &resp.dst_addr, resp.dst_size);
 ->->->->->->->-> if (!id_priv->cma_dev && resp.node_guid)
 ->->->->->->->-> ret = ucma_get_device(id_priv, resp.node_guid,
+                 TBD. 더 들어가야 함...
 ->->->->->->->->-> for (i = 0; i < cma_dev_cnt; i++)
 		     cma_dev = &cma_dev_array[i];
 		     if (cma_dev->guid == guid) goto match;
@@ -185,42 +186,66 @@ cm_thread()
 rping_run_client(struct rping_cb *cb)
 -> rping_bind_client(cb);
 ->-> &cb->sin->sin_port or sin6_port = cb->port;
-->-> rdma_resolve_addr(cb->cm_id, (struct sockaddr *) &cb->ssource, (struct sockaddr *) &cb->sin, 2000)
+->-> if (cb->ssouce.ss_family) rdma_resolve_addr(cb->cm_id, (struct sockaddr *) &cb->ssource, (struct sockaddr *) &cb->sin, 2000)
 ->->-> dst_len = ucma_addrlen(dst_addr), src_len = ucma_addrlen(src_addr)
 ->->-> if (af_ib_support) return rdma_resolve_addr2(id, src_addr, src_len, dst_addr, dst_len, timeout_ms);
-->->-> CMA_INIT_CMD(&cmd, sizeof cmd, RESOLVE_IP);
-->->-> id_priv = container_of(id, struct cma_id_private, id);
-->->-> cmd.id = id_priv->handle;
-->->-> if (src_addr) memcpy(&cmd.src_addr, src_addr, src_len);
-->->-> memcpy(&cmd.dst_addr, dst_addr, dst_len);
-->->-> cmd.timeout_ms = timeout_ms;
-->->-> ret = write(id->channel->fd, &cmd, sizeof cmd);
-->->-> memcpy(&id->route.addr.dst_storage, dst_addr, dst_len);
+->->->-> setting cmd's cmd, in, id, src_size, src_addr, dst_addr, dst_size, timeout_ms
+         as UCMA_CMD_RESOLVE_ADDR, sizeof(cmd) - sizeof(struct ucma_abi_cmd_hdr), id's id_priv->handle, src_len, src_addr, dst_addr, dst_len, timeout_ms
+->->->-> write(id->channel->fd, &cmd, sizeof cmd);
+->->->-> id->route.addr.dst_addr = dst_addr
+->->->-> return ucma_complete(id);
+		if (id_priv->id.event) rdma_ack_cm_event(id_priv->id.event); id_priv->id.event = NULL;
+		rdma_get_cm_event(id_priv->id.channel, &id_priv->id.event);
+		if (id_priv->id.event->status)
+			if (id_priv->id.event->event == RDMA_CM_EVENT_REJECTED) ret = ERR(ECONNREFUSED);
+			else if (id_priv->id.event->status < 0) ret = ERR(-id_priv->id.event->status);
+			else ret = ERR(id_priv->id.event->status);
+>->->-> setting cmd's cmd, in, id, src_addr, dst_addr, timeout_ms, dst_storage
+        as UCMA_CMD_RESOLVE_IP, sizeof(cmd)-sizeof(struct ucma_abi_cmd_hdr), id's id_priv->handle, src_addr, dst_addr, timeout_ms, dst_storage
+->->-> write(id->channel->fd, &cmd, sizeof cmd);
 ->->-> return ucma_complete(id);
-->->->-> ret = rdma_get_cm_event(id_priv->id.channel, &id_priv->id.event);
-->->->->-> ret = ucma_init();
-
 -> rping_setup_qp(cb, cb->cm_id);
-->-> cb->pd = ibv_alloc_pd(cm_id->verbs);
+->-> cb->pd = ibv_alloc_pd(cm_id->verbs); // rxe_alloc_pd()
 ->->-> pd = malloc(sizeof *pd);
-->->-> real_pd = ibv_alloc_pd(context->real_context);
+->->->-> ibv_cmd_alloc_pd(context, pd, &cmd, sizeof cmd, &resp, sizeof resp)
+->->->->-> execute_cmd_write(context, IB_USER_VERBS_CMD_ALLOC_PD, cmd, cmd_size, resp, resp_size);
+->->->->->-> cmd->core_payload.response = ioctl_ptr_to_u64(resp)
+->->->->->-> return ioctl_write(ctx, write_method, req + 1, core_req_size - sizeof(*req), req_size - sizeof(*req), resp, core_resp_size, resp_size);
+->->->->->-> setting req's command, in_words, out_word as @write_method, ?, ?
+->->->->->-> write(ctx->cmd_fd, req, req_size);
+->->->->-> setting pd's handle, context as resp->pd_handle, @context;
 ->->-> pd->context = context; //context = @cm_id->verbs
-->->-> pd->real_pd = real_pd;
 ->-> cb->channel = ibv_create_comp_channel(cm_id->verbs);
+->->-> channel = malloc(sizeof *channel);
+->->-> req.core_payload = (struct ib_uverbs_create_comp_channel){};
+->->-> execute_cmd_write(context, IB_USER_VERBS_CMD_CREATE_COMP_CHANNEL, &req, sizeof(req), &resp, sizeof(resp))
+->->-> setting channel's context, fd, refcnt as @context, resp.fd, 0
 ->-> cb->cq = ibv_create_cq(cm_id->verbs, RPING_SQ_DEPTH * 2, cb, cb->channel, 0);
-->->-> cq = get_ops(context)->create_cq(context, cqe, channel, comp_vector);
-->->->-> rxe_create_cq(struct ibv_context *context, int cqe, struct ibv_comp_channel *channel, int comp_vector)
+->->-> cq = get_ops(context)->create_cq(context, cqe, channel, comp_vector); //rxe_create_cq()
+	cq = malloc(sizeof *cq);
+	ibv_cmd_create_cq(context, cqe, channel, comp_vector, &cq->ibv_cq, NULL, 0, &resp.ibv_resp, sizeof resp);
+	cq->queue = mmap(NULL, resp.mi.size, PROT_READ | PROT_WRITE, MAP_SHARED, context->cmd_fd, resp.mi.offset);
+	cq->mmap_info = resp.mi;
+	return &cq->ibv_cq;
 ->->-> verbs_init_cq(cq, context, channel, cq_context);
-->->->-> cq->context = context;
-->->->-> cq->channel = channel;
-->->->-> cq->cq_context = cq_context;
+->->->-> cq->context = context; cq->channel = channel;
+->->->-> ++cq->channel->refcnt; cq->cq_context = cq_context; cq->comp_events_completed = 0; cq->async_events_completed = 0;
 ->-> ibv_req_notify_cq(cb->cq, 0);
-->->-> ibv_cmd_req_notify_cq(cb->cq, 0)
+->->-> return cq->context->ops.req_notify_cq(cq, solicited_only); // ibv_cmd_req_notify_cq(cb->cq, 0)
+->->->-> req.core_payload = (struct ib_uverbs_req_notify_cq){ .cq_handle = ibcq->handle, .solicited_only = !!solicited_only, };
 ->->->-> return execute_cmd_write_req(ibcq->context, IB_USER_VERBS_CMD_REQ_NOTIFY_CQ, &req, sizeof(req));
 ->-> rping_create_qp(cb);
-->->-> cb->qp = ibv_create_qp(cb->pd, &init_attr);
-->->->-> rxe_create_qp(struct ibv_pd *ibpd, struct ibv_qp_init_attr *attr)
-
+->->-> if (cb->self_create_qp) cb->qp = ibv_create_qp(cb->pd, &init_attr);
+->->->-> struct ibv_qp *qp = get_ops(pd->context)->create_qp(pd, qp_init_attr); //rxe_create_qp()
+->->->->-> TBD.
+->->->-> setting qp's context, qp_context, pd, send_cq, recv_cq, srq, qp_type, state, events_completed
+         as pd->context, qp_init_attr->qp_context, pd, qp_init_attr->send_cq, qp_init_attr->recv_cq, qp_init_attr->srq, qp_init_attr->qp_type, IBV_QPS_RESET, 0
+->->-> struct ibv_qp_attr attr = { .qp_state = IBV_QPS_INIT, .pkey_index = 0, .port_num = id->port_num, .qp_access_flags = 0, };
+->->-> ret = ibv_modify_qp(cb->qp, &attr, IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS); // rxe_modify_gp();
+->->->-> TBD.
+->->-> ret = rdma_create_qp(id, cb->pd, &init_attr);
+->->->-> TBD.
+->->-> if (!ret) cb->qp = id->qp;
 -> rping_setup_buffers(cb);
 ->-> cb->recv_mr = ibv_reg_mr(cb->pd, &cb->recv_buf, sizeof cb->recv_buf, IBV_ACCESS_LOCAL_WRITE);
 ->->-> rxe_reg_mr(cb->pd, &cb->recv_buf, sizeof cb->recv_buf, IBV_ACCESS_LOCAL_WRITE);
