@@ -1,0 +1,584 @@
+main()
+-> set cb(control block)
+   cb->sin.ss_family = PF_INET
+   cb->port = htobe16(7174)
+
+-> cb->cm_channel = create_first_event_channel()
+->-> rdma_create_event_channel()
+->->-> ucma_init()
+->->->-> check_abi_version();
+->->->-> sync_devices_list();
+->->->->-> new_list = ibv_get_device_list(&numb_dev);
+->->->-> ucma_set_af_ib_support();
+->->->->-> rdma_create_id(NULL, &id, NULL, RDMA_PS_IB);
+->->->->-> sib.sib_family = AF_IB;
+->->->->-> sib.sib_sid = htobe64(RDMA_IB_IP_PS_TCP);
+->->->->-> sib.sib_sid_mask = htobe64(RDMA_IB_IP_PS_MASK);
+->->->->-> af_ib_support = 1;
+->->->->-> ret = rdma_bind_addr(id, (struct sockaddr *) &sib);
+->->->->->-> addrlen = ucma_addrlen(addr);
+->->->->->-> if (af_ib_support) return rdma_bind_addr2(id, addr, addrlen);
+->->->->->->-> CMA_INIT_CMD(&cmd, sizeof cmd, BIND);
+->->->->->->-> id_priv = container_of(id, struct cma_id_private, id);
+->->->->->->-> cmd.id = id_priv->handle;
+->->->->->->-> cmd.addr_size = addrlen;
+->->->->->->-> memcpy(&cmd.addr, addr, addrlen);
+->->->->->->-> ret = write(id->channel->fd, &cmd, sizeof cmd);
+->->->->->->-> ret = ucma_query_addr(id);
+->->->->->->->-> CMA_INIT_CMD_RESP(&cmd, sizeof cmd, QUERY, &resp, sizeof resp);
+->->->->->->->-> id_priv = container_of(id, struct cma_id_private, id);
+->->->->->->->-> cmd.id = id_priv->handle;
+->->->->->->->-> cmd.option = UCMA_QUERY_ADDR;
+->->->->->->->-> resp.ibdev_index = UCMA_INVALID_IB_INDEX;
+->->->->->->->-> ret = write(id->channel->fd, &cmd, sizeof cmd);
+->->->->->->->-> memcpy(&id->route.addr.src_addr, &resp.src_addr, resp.src_size);
+->->->->->->->-> memcpy(&id->route.addr.dst_addr, &resp.dst_addr, resp.dst_size);
+->->->->->->->-> if (!id_priv->cma_dev && resp.node_guid) {
+->->->->->->->-> ret = ucma_get_device(id_priv, resp.node_guid,
+->->->->->->->->-> pthread_mutex_lock(&mut);
+->->->->->->->->-> cma_dev = ucma_get_cma_device(guid, idx);
+->->->->->->->->-> ret = ucma_init_device(cma_dev);
+->->->->->->->->->-> cma_dev->verbs = ibv_open_device(cma_dev->dev);
+->->->->->->->->->-> ret = ibv_query_device(cma_dev->verbs, &attr);
+->->->->->->->->->->-> rxe_query_device(cma_dev->verbs, &attr);
+->->->->->->->->->-> cma_dev->port_cnt = attr.phys_port_cnt;
+->->->->->->->->->-> cma_dev->max_qpsize = attr.max_qp_wr;
+->->->->->->->->->-> cma_dev->max_initiator_depth = (uint8_t) attr.max_qp_init_rd_atom;
+->->->->->->->->->-> cma_dev->max_responder_resources = (uint8_t) attr.max_qp_rd_atom;
+->->->->->->->->-> id_priv->cma_dev = cma_dev;
+->->->->->->->->-> id_priv->id.verbs = cma_dev->verbs;
+->->->->->->->->-> id_priv->id.pd = cma_dev->pd;
+->->->->->->->-> id->port_num = resp.port_num;
+->->->->->->->-> id->route.addr.addr.ibaddr.pkey = resp.pkey;
+->->->->-> rdma_destroy_id(id);
+->->-> channel = malloc(sizeof(*channel));
+->->-> channel->fd = open_cdev(dev_name, dev_cdev);
+->->->->// ./buildlib/config.h.in:16:#define RDMA_CDEV_DIR "/dev/infiniband"
+	// static char dev_name[64] = "rdma_cm";
+	asprintf(&devpath, RDMA_CDEV_DIR "/%s", devname_hint) < 0)
+	fd = open_cdev_internal(devpath, cdev);
+->->->->-> return open(path, O_RDWR | O_CLOEXEC)
+
+-> rdma_create_id(cb->cm_channel, &cb->cm_id, cb, RDMA_PS_TCP) /PS -> port space)
+->-> rdma_create_id2(channel, id, context, ps, qp_type)
+->->-> ucma_init();
+->->-> id_priv = ucma_alloc_id(channel, context, ps, qp_type);
+->->->-> id_priv = calloc(1, sizeof(*id_priv));
+		id_priv->id.context = context; id_priv->id.ps = ps; id_priv->id.qp_type = qp_type; id_priv->handle = 0xFFFFFFFF;
+		if (!channel) { id_priv->id.channel = rdma_create_event_channel(); id_priv->sync = 1;
+		} else { id_priv->id.channel = channel; }
+->->->-> cmd.out = sizeof(resp) cmd.response = &resp cmd.uid = (uintptr_t) id_priv; cmd.ps = ps; cmd.qp_type = qp_type;
+->->->-> write(id_priv->id.channel->fd, &cmd, sizeof cmd);
+->->->-> id_priv->handle = resp.id;
+->->->-> ucma_insert_id(id_priv);
+->->->-> *id = &id_priv->id;
+
+-> pthread_create(&cb->cmthread, NULL, cm_thread, cb);
+->-> while (1) {
+->-> ret = rdma_get_cm_event(cb->cm_channel, &event);
+->->-> ret = ucma_init();
+->->->-> ret = check_abi_version();
+->->->-> ret = sync_devices_list();
+->->->-> ucma_set_af_ib_support();
+->-> ret = rping_cma_event_handler(event->id, event);
+->->-> switch (event->event) {
+->->-> case RDMA_CM_EVENT_ADDR_RESOLVED:
+->->-> 	cb->state = ADDR_RESOLVED;
+->->-> 	ret = rdma_resolve_route(cma_id, 2000);
+->->-> case RDMA_CM_EVENT_ROUTE_RESOLVED:
+->->-> 	cb->state = ROUTE_RESOLVED;
+->->->  sem_post(&cb->sem);
+->->-> case RDMA_CM_EVENT_CONNECT_REQUEST:
+->->-> 	cb->state = CONNECT_REQUEST;
+->->-> 	cb->child_cm_id = cma_id;
+->->->  sem_post(&cb->sem);
+->->-> case RDMA_CM_EVENT_CONNECT_RESPONSE:
+->->-> 	DEBUG_LOG("CONNECT_RESPONSE\n");
+->->-> 	cb->state = CONNECTED;
+->->->  sem_post(&cb->sem);
+->->-> case RDMA_CM_EVENT_ESTABLISHED:
+->->-> 	if (!cb->server) cb->state = CONNECTED;
+->->->  sem_post(&cb->sem);
+->->-> case RDMA_CM_EVENT_ADDR_ERROR:
+->->-> case RDMA_CM_EVENT_ROUTE_ERROR:
+->->-> case RDMA_CM_EVENT_CONNECT_ERROR:
+->->-> case RDMA_CM_EVENT_UNREACHABLE:
+->->-> case RDMA_CM_EVENT_REJECTED:
+->->-> case RDMA_CM_EVENT_DISCONNECTED:
+->->-> 	cb->state = DISCONNECTED;
+->->-> case RDMA_CM_EVENT_DEVICE_REMOVAL:
+->->-> 	cb->state = ERROR;
+->-> rdma_ack_cm_event(event);
+->-> }
+
+-> rping_run_persistent_server(cb) or rping_run_server(cb) or rping_run_client(cb);
+
+##########################################
+# client
+##########################################
+rping_run_client(struct rping_cb *cb)
+-> rping_bind_client(cb);
+->-> &cb->sin->sin_port or sin6_port = cb->port;
+->-> rdma_resolve_addr(cb->cm_id, (struct sockaddr *) &cb->ssource, (struct sockaddr *) &cb->sin, 2000)
+->->-> dst_len = ucma_addrlen(dst_addr), src_len = ucma_addrlen(src_addr)
+->->-> if (af_ib_support) return rdma_resolve_addr2(id, src_addr, src_len, dst_addr, dst_len, timeout_ms);
+->->-> CMA_INIT_CMD(&cmd, sizeof cmd, RESOLVE_IP);
+->->-> id_priv = container_of(id, struct cma_id_private, id);
+->->-> cmd.id = id_priv->handle;
+->->-> if (src_addr) memcpy(&cmd.src_addr, src_addr, src_len);
+->->-> memcpy(&cmd.dst_addr, dst_addr, dst_len);
+->->-> cmd.timeout_ms = timeout_ms;
+->->-> ret = write(id->channel->fd, &cmd, sizeof cmd);
+->->-> memcpy(&id->route.addr.dst_storage, dst_addr, dst_len);
+->->-> return ucma_complete(id);
+->->->-> ret = rdma_get_cm_event(id_priv->id.channel, &id_priv->id.event);
+->->->->-> ret = ucma_init();
+
+-> rping_setup_qp(cb, cb->cm_id);
+->-> cb->pd = ibv_alloc_pd(cm_id->verbs);
+->->-> pd = malloc(sizeof *pd);
+->->-> real_pd = ibv_alloc_pd(context->real_context);
+->->-> pd->context = context; //context = @cm_id->verbs
+->->-> pd->real_pd = real_pd;
+->-> cb->channel = ibv_create_comp_channel(cm_id->verbs);
+->-> cb->cq = ibv_create_cq(cm_id->verbs, RPING_SQ_DEPTH * 2, cb, cb->channel, 0);
+->->-> cq = get_ops(context)->create_cq(context, cqe, channel, comp_vector);
+->->->-> rxe_create_cq(struct ibv_context *context, int cqe, struct ibv_comp_channel *channel, int comp_vector)
+->->-> verbs_init_cq(cq, context, channel, cq_context);
+->->->-> cq->context = context;
+->->->-> cq->channel = channel;
+->->->-> cq->cq_context = cq_context;
+->-> ibv_req_notify_cq(cb->cq, 0);
+->->-> ibv_cmd_req_notify_cq(cb->cq, 0)
+->->->-> return execute_cmd_write_req(ibcq->context, IB_USER_VERBS_CMD_REQ_NOTIFY_CQ, &req, sizeof(req));
+->-> rping_create_qp(cb);
+->->-> cb->qp = ibv_create_qp(cb->pd, &init_attr);
+->->->-> rxe_create_qp(struct ibv_pd *ibpd, struct ibv_qp_init_attr *attr)
+
+-> rping_setup_buffers(cb);
+->-> cb->recv_mr = ibv_reg_mr(cb->pd, &cb->recv_buf, sizeof cb->recv_buf, IBV_ACCESS_LOCAL_WRITE);
+->->-> rxe_reg_mr(cb->pd, &cb->recv_buf, sizeof cb->recv_buf, IBV_ACCESS_LOCAL_WRITE);
+->-> cb->send_mr = ibv_reg_mr(cb->pd, &cb->send_buf, sizeof cb->send_buf, 0);
+->->-> rxe_reg_mr(cb->pd, &cb->send_buf, sizeof cb->send_buf, 0)
+->-> cb->rdma_buf = malloc(cb->size);
+->-> if(!cb->server) cb->rdma_mr = ibv_reg_mr(cb->pd, cb->rdma_buf, cb->size, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE);
+->->-> rxe_reg_mr(cb->pd, cb->rdma_buf, cb->size, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE);
+->-> rping_setup_wr(cb);
+->->-> cb->recv_sgl.* =
+->->-> cb->rq_wr.* =
+->->-> cb->send_sgl.* = 
+->->-> cb->sq_wr.* =
+->->-> cb->rdma_sgl.* =
+->->-> cb->rdma_sq_wr.* =
+
+-> ibv_post_recv(cb->qp, &cb->rq_wr, &bad_wr);
+->-> rxe_post_recv(cb->qp, &cb->rq_wr, &bad_wr);
+
+-> pthread_create(&cb->cqthread, NULL, cq_thread, cb);
+->-> while (1) {	
+->->  pthread_testcancel();
+->->  ret = ibv_get_cq_event(cb->channel, &ev_cq, &ev_ctx);
+->->  ret = ibv_req_notify_cq(cb->cq, 0);
+->->  ret = rping_cq_event_handler(cb);
+->->-> while ((ret = ibv_poll_cq(cb->cq, 1, &wc)) == 1) {
+->->->-> rxe_poll_cq(cb->cq, 1, &wc)
+->->-> 	switch (wc.opcode) {
+->->-> 	case IBV_WC_SEND:
+->->-> 	 DEBUG_LOG("send completion\n");
+->->-> 	case IBV_WC_RDMA_WRITE:
+->->-> 	 DEBUG_LOG("rdma write completion\n");
+->->-> 	 cb->state = RDMA_WRITE_COMPLETE;
+->->-> 	 sem_post(&cb->sem);
+->->-> 	case IBV_WC_RDMA_READ:
+->->-> 	 DEBUG_LOG("rdma read completion\n");
+->->-> 	 cb->state = RDMA_READ_COMPLETE;
+->->-> 	 sem_post(&cb->sem);
+->->-> 	case IBV_WC_RECV:
+->->-> 	 ret = cb->server
+->->->   ? server_recv(cb, &wc)
+->->->-> cb->remote_rkey = be32toh(cb->recv_buf.rkey);
+->->->-> cb->remote_addr = be64toh(cb->recv_buf.buf);
+->->->-> cb->remote_len  = be32toh(cb->recv_buf.size);
+->->->-> if (cb->state <= CONNECTED || cb->state == RDMA_WRITE_COMPLETE)
+->->->->  cb->state = RDMA_READ_ADV;
+->->->-> else
+->->->->  cb->state = RDMA_WRITE_ADV;
+->->->  : client_recv(cb, &wc);
+->->->-> if (cb->state == RDMA_READ_ADV)
+->->->->  cb->state = RDMA_WRITE_ADV;
+->->->-> else
+->->->->  cb->state = RDMA_WRITE_COMPLETE;
+->->-> 	 ret = ibv_post_recv(cb->qp, &cb->rq_wr, &bad_wr);
+->->->->  rxe_post_recv(cb->qp, &cb->rq_wr, &bad_wr);
+->->-> 	 sem_post(&cb->sem);
+->->-> }
+->->  ibv_ack_cq_events(cb->cq, 1);
+->-> }
+
+-> rping_connect_client(cb);
+->-> rping_init_conn_param(cb, &conn_param);
+->->-> memset(conn_param, 0, sizeof(*conn_param));
+->->-> conn_param->* = 1;
+->-> ret = rdma_connect(cb->cm_id, &conn_param);
+->->-> id_priv = container_of(id, struct cma_id_private, id);
+->->-> ret = ucma_valid_param(id_priv, conn_param);
+
+-> rping_test_client(cb);
+->-> for (ping=0; ping < cb->count; ping++)
+->->  start_buf = rdma-ping" + ping+ ascii code
+->->  rping_format_send(cb, cb->start_buf, cb->start_mr);
+->->-> info->buf = htobe64((uint64_t) (unsigned long) buf);
+->->-> info->rkey = htobe32(mr->rkey);
+->->-> info->size = htobe32(cb->size);
+->->  ibv_post_send(cb->qp, &cb->sq_wr, &bad_wr);
+->->-> qp->context->ops.post_send(qp, wr, bad_wr);
+->->->-> rxe_post_send(qp, wr, bad_wr)
+
+-> pthread_create(&cb->cqthread, NULL, cq_thread, cb);
+
+##########################################
+# server
+##########################################
+rping_run_server(struct rping_cb *cb)
+-> rping_bind_server(cb);
+->-> if (cb->sin.ss_family == AF_INET)
+->->  ((struct sockaddr_in *) &cb->sin)->sin_port = cb->port;
+->-> else
+->->  ((struct sockaddr_in6 *) &cb->sin)->sin6_port = cb->port;
+->-> ret = rdma_bind_addr(cb->cm_id, (struct sockaddr *) &cb->sin);
+->-> ret = rdma_listen(cb->cm_id, 3);
+->->-> CMA_INIT_CMD(&cmd, sizeof cmd, LISTEN);
+->->-> id_priv = container_of(id, struct cma_id_private, id);
+->->-> cmd.id = id_priv->handle;
+->->-> cmd.backlog = backlog;
+->->-> ret = write(id->channel->fd, &cmd, sizeof cmd);
+->->-> if (af_ib_support) return ucma_query_addr(id);
+->->-> else return ucma_query_route(id);
+->->->-> CMA_INIT_CMD_RESP(&cmd, sizeof cmd, QUERY_ROUTE, &resp, sizeof resp);
+->->->-> id_priv = container_of(id, struct cma_id_private, id);
+->->->-> cmd.id = id_priv->handle;
+->->->-> resp.ibdev_index = UCMA_INVALID_IB_INDEX;
+->->->-> ret = write(id->channel->fd, &cmd, sizeof cmd);
+->->->-> if (resp.num_paths) {
+->->->->  id->route.path_rec = malloc(sizeof(*id->route.path_rec) * resp.num_paths);
+->->->->  id->route.num_paths = resp.num_paths;
+->->->->  for (i = 0; i < resp.num_paths; i++)
+->->->->   ibv_copy_path_rec_from_kern(&id->route.path_rec[i], &resp.ib_route[i]);
+->->->-> }
+->->->-> memcpy(id->route.addr.addr.ibaddr.sgid.raw, resp.ib_route[0].sgid, sizeof id->route.addr.addr.ibaddr.sgid);
+->->->-> memcpy(id->route.addr.addr.ibaddr.dgid.raw, resp.ib_route[0].dgid, sizeof id->route.addr.addr.ibaddr.dgid);
+->->->-> id->route.addr.addr.ibaddr.pkey = resp.ib_route[0].pkey;
+->->->-> memcpy(&id->route.addr.src_addr, &resp.src_addr, sizeof resp.src_addr);
+->->->-> memcpy(&id->route.addr.dst_addr, &resp.dst_addr, sizeof resp.dst_addr);
+->->->-> if (!id_priv->cma_dev && resp.node_guid) {
+->->->->  ret = ucma_get_device(id_priv, resp.node_guid, resp.ibdev_index);
+->->->->  id_priv->id.port_num = resp.port_num;
+->->->-> }
+-> sem_wait(&cb->sem);
+-> rping_setup_qp(cb, cb->child_cm_id);
+->-> cb->pd = ibv_alloc_pd(cm_id->verbs);
+->-> cb->channel = ibv_create_comp_channel(cm_id->verbs);
+->-> cb->cq = ibv_create_cq(cm_id->verbs, RPING_SQ_DEPTH * 2, cb, cb->channel, 0);
+->-> ret = ibv_req_notify_cq(cb->cq, 0);
+->-> ret = rping_create_qp(cb);
+-> rping_setup_buffers(cb);
+-> ibv_post_recv(cb->qp, &cb->rq_wr, &bad_wr);
+->-> rxe_post_recv(cb->qp, &cb->rq_wr, &bad_wr);
+-> pthread_create(&cb->cqthread, NULL, cq_thread, cb);
+-> rping_accept(cb);
+->-> if (cb->self_create_qp) {
+->->  ret = rping_self_modify_qp(cb, cb->child_cm_id);
+->->  rping_init_conn_param(cb, &conn_param);
+->->  ret = rdma_accept(cb->child_cm_id, &conn_param);
+->-> }
+->-> else ret = rdma_accept(cb->child_cm_id, NULL);
+->-> sem_wait(&cb->sem);
+-> rping_test_server(cb);
+->-> while (1) {
+->-> sem_wait(&cb->sem);
+->-> cb->rdma_sq_wr.opcode = IBV_WR_RDMA_READ;
+->-> cb->rdma_sq_wr.wr.rdma.rkey = cb->remote_rkey;
+->-> cb->rdma_sq_wr.wr.rdma.remote_addr = cb->remote_addr;
+->-> cb->rdma_sq_wr.sg_list->length = cb->remote_len;
+->-> ret = ibv_post_send(cb->qp, &cb->rdma_sq_wr, &bad_wr);
+->->-> qp->context->ops.post_send(cb->qp, &cb->rdma_sq_wr, &bad_wr);
+->->->-> rxe_post_send(cb->qp, &cb->rdma_sq_wr, &bad_wr);
+->-> sem_wait(&cb->sem);
+->-> if (cb->verbose) printf("server ping data: %s\n", cb->rdma_buf);
+->-> ret = ibv_post_send(cb->qp, &cb->sq_wr, &bad_wr);
+->->-> qp->context->ops.post_send(cb->qp, &cb->sq_wr, &bad_wr);
+->->->-> rxe_post_send(cb->qp, &cb->sq_wr, &bad_wr);
+->-> sem_wait(&cb->sem);
+->-> cb->rdma_sq_wr.opcode = IBV_WR_RDMA_WRITE;
+->-> cb->rdma_sq_wr.wr.rdma.rkey = cb->remote_rkey;
+->-> cb->rdma_sq_wr.wr.rdma.remote_addr = cb->remote_addr;
+->-> cb->rdma_sq_wr.sg_list->length = strlen(cb->rdma_buf) + 1;
+->-> DEBUG_LOG("rdma write from lkey %x laddr %" PRIx64 " len %d\n",
+->->  cb->rdma_sq_wr.sg_list->lkey, cb->rdma_sq_wr.sg_list->addr, cb->rdma_sq_wr.sg_list->length);
+->-> ret = ibv_post_send(cb->qp, &cb->rdma_sq_wr, &bad_wr);
+->->-> qp->context->ops.post_send(cb->qp, &cb->rdma_sq_wr, &bad_wr);
+->->->-> rxe_post_send(cb->qp, &cb->rdma_sq_wr, &bad_wr);
+->-> ret = sem_wait(&cb->sem);
+->-> DEBUG_LOG("server rdma write complete \n");
+->-> ret = ibv_post_send(cb->qp, &cb->sq_wr, &bad_wr);
+->->-> qp->context->ops.post_send(cb->qp, &cb->sq_wr, &bad_wr);
+->->->-> rxe_post_send(cb->qp, &cb->sq_wr, &bad_wr);
+
+##########################################
+# persistent_server
+##########################################
+static int rping_run_persistent_server(struct rping_cb *listening_cb)
+-> ret = rping_bind_server(listening_cb);
+-> ret = pthread_attr_init(&attr);
+-> while (1) {
+->  sem_wait(&listening_cb->sem);
+->  cb = clone_cb(listening_cb);
+->-> struct rping_cb *cb = malloc(sizeof *cb);
+->-> memset(cb, 0, sizeof *cb);
+->-> *cb = *listening_cb;
+->-> cb->child_cm_id->context = cb;
+->-> return cb;
+->  ret = pthread_create(&cb->persistent_server_thread, &attr, rping_persistent_server_thread, cb);
+->-> ret = rping_setup_qp(cb, cb->child_cm_id);
+->-> ret = rping_setup_buffers(cb);
+->-> ret = ibv_post_recv(cb->qp, &cb->rq_wr, &bad_wr);
+->->-> rxe_post_recv(cb->qp, &cb->rq_wr, &bad_wr);
+->-> ret = pthread_create(&cb->cqthread, NULL, cq_thread, cb);
+->-> ret = rping_accept(cb);
+->-> rping_test_server(cb);
+->-> rping_disconnect(cb, cb->child_cm_id);
+->->-> if (cb->self_create_qp) {
+->->-> 	qp_attr.qp_state = IBV_QPS_ERR;
+->->-> 	err = ibv_modify_qp(cb->qp, &qp_attr, IBV_QP_STATE);
+->->-> return rdma_disconnect(id);
+->->->-> ret = ucma_shutdown(id);
+->->->-> CMA_INIT_CMD(&cmd, sizeof cmd, DISCONNECT);
+->->->-> id_priv = container_of(id, struct cma_id_private, id);
+->->->-> cmd.id = id_priv->handle;
+->->->-> ret = write(id->channel->fd, &cmd, sizeof cmd);
+->->->-> return ucma_complete(id);
+->->->->-> ret = rdma_get_cm_event(id_priv->id.channel, &id_priv->id.event);
+->->->->->-> ret = ucma_init();
+->-> pthread_join(cb->cqthread, NULL);
+->-> rping_free_buffers(cb);
+->-> rping_free_qp(cb);
+->-> rdma_destroy_id(cb->child_cm_id);
+->-> free_cb(cb);
+->  return ret;
+-> }
+
+//Control block struct.
+struct rping_cb {
+   int server;                     /* 0 iff client */
+   pthread_t cqthread;
+   pthread_t persistent_server_thread;
+   struct ibv_comp_channel *channel;
+   struct ibv_cq *cq;
+   struct ibv_pd *pd;
+   struct ibv_qp *qp;
+   struct ibv_recv_wr rq_wr;       /* recv work request record */
+   struct ibv_sge recv_sgl;        /* recv single SGE */
+   struct rping_rdma_info recv_buf;/* malloc'd buffer */
+   struct ibv_mr *recv_mr;         /* MR associated with this buffer */
+   struct ibv_send_wr sq_wr;       /* send work request record */
+   struct ibv_sge send_sgl;
+   struct rping_rdma_info send_buf;/* single send buf */
+   struct ibv_mr *send_mr;
+   struct ibv_send_wr rdma_sq_wr;  /* rdma work request record */
+   struct ibv_sge rdma_sgl;        /* rdma single SGE */
+   char *rdma_buf;                 /* used as rdma sink */
+   struct ibv_mr *rdma_mr;
+   uint32_t remote_rkey;           /* remote guys RKEY */
+   uint64_t remote_addr;           /* remote guys TO */
+   uint32_t remote_len;            /* remote guys LEN */
+   char *start_buf;                /* rdma read src */
+   struct ibv_mr *start_mr;
+   enum test_state state;          /* used for cond/signalling */
+   sem_t sem;
+   struct sockaddr_storage sin;
+   struct sockaddr_storage ssource;
+   __be16 port;                    /* dst port in NBO */
+   int verbose;                    /* verbose logging */
+   int self_create_qp;             /* Create QP not via cma */
+   int count;                      /* ping count */
+   int size;                       /* ping data size */
+   int validate;                   /* validate ping data */
+   /* CM stuff */
+   pthread_t cmthread;
+   struct rdma_event_channel *cm_channel;
+   struct rdma_cm_id *cm_id;       /* connection on client side,*/
+                                   /* listener on service side. */
+   struct rdma_cm_id *child_cm_id; /* connection on server side */
+}
+
+##########################################
+# rxe
+##########################################
+static struct ibv_qp *rxe_create_qp(struct ibv_pd *ibpd, struct ibv_qp_init_attr *attr)
+-> ret = ibv_cmd_create_qp(ibpd, &qp->vqp.qp, attr, &cmd, sizeof(cmd), &resp.ibv_resp, sizeof(resp));
+-> ret = map_queue_pair(ibpd->context->cmd_fd, qp, attr, &resp.drv_payload);
+->-> qp->rq.max_sge = attr->cap.max_recv_sge;
+->-> qp->rq.queue = mmap(NULL, resp->rq_mi.size, PROT_READ | PROT_WRITE, MAP_SHARED, cmd_fd, resp->rq_mi.offset);
+->-> qp->rq_mmap_info = resp->rq_mi;
+->-> qp->sq.max_sge = attr->cap.max_send_sge;
+->-> qp->sq.max_inline = attr->cap.max_inline_data;
+->-> qp->sq.queue = mmap(NULL, resp->sq_mi.size, PROT_READ | PROT_WRITE, MAP_SHARED, cmd_fd, resp->sq_mi.offset);
+->-> qp->sq_mmap_info = resp->sq_mi;
+-> qp->sq_mmap_info = resp.sq_mi;
+
+static struct ibv_cq *rxe_create_cq(struct ibv_context *context, int cqe, struct ibv_comp_channel *channel, int comp_vector)
+-> ret = ibv_cmd_create_cq(context, cqe, channel, comp_vector, &cq->vcq.cq, NULL, 0, &resp.ibv_resp, sizeof(resp));
+->-> return ibv_icmd_create_cq(context, cqe, channel, comp_vector, 0, cq, cmdb, 0);
+->->-> handle = fill_attr_out_obj(cmdb, UVERBS_ATTR_CREATE_CQ_HANDLE);
+->->-> fill_attr_out_ptr(cmdb, UVERBS_ATTR_CREATE_CQ_RESP_CQE, &resp_cqe);
+->->-> fill_attr_in_uint32(cmdb, UVERBS_ATTR_CREATE_CQ_CQE, cqe);
+->->-> fill_attr_in_uint64(cmdb, UVERBS_ATTR_CREATE_CQ_USER_HANDLE, (uintptr_t)cq);
+->->-> fill_attr_in_uint32(cmdb, UVERBS_ATTR_CREATE_CQ_COMP_VECTOR, comp_vector);
+->->-> async_fd_attr = fill_attr_in_fd(cmdb, UVERBS_ATTR_CREATE_CQ_EVENT_FD, context->async_fd);
+->->-> if (priv->imported) fallback_require_ioctl(cmdb);
+->->-> else attr_optional(async_fd_attr);
+->->-> switch (execute_ioctl_fallback(cq->context, create_cq, cmdb, &ret)) {
+->->->  case TRY_WRITE: ret = execute_write_bufs(cq->context, IB_USER_VERBS_CMD_CREATE_CQ, req, resp);
+->->->  case TRY_WRITE_EX: ret = execute_write_bufs_ex(cq->context, IB_USER_VERBS_EX_CMD_CREATE_CQ, req, resp);
+->->->  case ERROR:
+->->->  case SUCCESS:
+->->-> cq->handle = read_attr_obj(UVERBS_ATTR_CREATE_CQ_HANDLE, handle);
+->->-> cq->cqe = resp_cqe;
+-> cq->queue = mmap(NULL, resp.mi.size, PROT_READ | PROT_WRITE, MAP_SHARED, context->cmd_fd, resp.mi.offset);
+-> cq->wc_size = 1ULL << cq->queue->log2_elem_size;
+-> cq->mmap_info = resp.mi;
+-> pthread_spin_init(&cq->lock, PTHREAD_PROCESS_PRIVATE);
+-> return &cq->vcq.cq;
+
+static int rxe_post_send(struct ibv_qp *ibqp, struct ibv_send_wr *wr_list, struct ibv_send_wr **bad_wr)
+->struct rxe_qp *qp = to_rqp(ibqp);
+->struct rxe_wq *sq = &qp->sq;
+-> while (wr_list) {
+-> rc = post_one_send(qp, sq, wr_list);
+->-> err = validate_send_wr(qp, ibwr, length);
+->-> wqe = (struct rxe_send_wqe *)producer_addr(sq->queue);
+->-> err = init_send_wqe(qp, sq, ibwr, length, wqe);
+->->-> convert_send_wr(qp, &wqe->wr, ibwr);
+->->-> if (qp_type(qp) == IBV_QPT_UD) {
+->->-> 	struct rxe_ah *ah = to_rah(ibwr->wr.ud.ah);
+->->-> if (ibwr->send_flags & IBV_SEND_INLINE) {
+->->-> 	uint8_t *inline_data = wqe->dma.inline_data;
+->->-> 	for (i = 0; i < num_sge; i++) {
+->->-> 	 memcpy(inline_data, (uint8_t *)(long)ibwr->sg_list[i].addr, ibwr->sg_list[i].length);
+->->-> 	 inline_data += ibwr->sg_list[i].length;
+->->-> 	}
+->->-> }
+->->-> else
+->->-> 	memcpy(wqe->dma.sge, ibwr->sg_list, num_sge*sizeof(struct ibv_sge));
+->->-> if ((opcode == IBV_WR_ATOMIC_CMP_AND_SWP) || (opcode == IBV_WR_ATOMIC_FETCH_AND_ADD))
+->->-> 	wqe->iova = ibwr->wr.atomic.remote_addr;
+->->-> else
+->->-> 	wqe->iova = ibwr->wr.rdma.remote_addr;
+->->-> wqe->dma.length = length;
+->->-> wqe->dma.resid = length;
+->->-> wqe->dma.num_sge	= num_sge;
+->->-> wqe->dma.cur_sge	= 0;
+->->-> wqe->dma.sge_offset = 0;
+->->-> wqe->state = 0;
+->->-> wqe->ssn	= qp->ssn++;
+->-> advance_producer(sq->queue);
+-> post_send_db(ibqp);
+->-> struct ibv_post_send cmd;
+->-> struct ib_uverbs_post_send_resp resp;
+->-> cmd.hdr.command = IB_USER_VERBS_CMD_POST_SEND;
+->-> cmd.hdr.in_words = sizeof(cmd) / 4;
+->-> cmd.hdr.out_words = sizeof(resp) / 4;
+->-> cmd.response = (uintptr_t)&resp;
+->-> cmd.qp_handle = ibqp->handle;
+->-> cmd.wr_count = 0;
+->-> cmd.sge_count = 0;
+->-> cmd.wqe_size = sizeof(struct ibv_send_wr);
+
+static int rxe_post_recv(struct ibv_qp *ibqp, struct ibv_recv_wr *recv_wr, struct ibv_recv_wr **bad_wr)
+-> struct rxe_qp *qp = to_rqp(ibqp);
+-> struct rxe_wq *rq = &qp->rq;
+-> while (recv_wr) {
+-> rc = rxe_post_one_recv(rq, recv_wr);
+->-> struct rxe_recv_wqe *wqe;
+->-> struct rxe_queue_buf *q = rq->queue;
+->-> wqe = (struct rxe_recv_wqe *)producer_addr(q);
+->-> wqe->wr_id = recv_wr->wr_id;
+->-> wqe->num_sge = recv_wr->num_sge;
+->-> memcpy(wqe->dma.sge, recv_wr->sg_list, wqe->num_sge*sizeof(*wqe->dma.sge));
+->-> for (i = 0; i < wqe->num_sge; i++)
+->-> 	length += wqe->dma.sge[i].length;
+->-> wqe->dma.length = length;
+->-> wqe->dma.resid = length;
+->-> wqe->dma.cur_sge = 0;
+->-> wqe->dma.num_sge = wqe->num_sge;
+->-> wqe->dma.sge_offset = 0;
+->-> advance_producer(q);
+-> recv_wr = recv_wr->next;}
+->return rc;
+
+static int rxe_poll_cq(struct ibv_cq *ibcq, int ne, struct ibv_wc *wc)
+-> struct rxe_cq *cq = to_rcq(ibcq);
+-> struct rxe_queue_buf *q;
+-> q = cq->queue;
+-> for (npolled = 0; npolled < ne; ++npolled, ++wc) {
+->  if (queue_empty(q)) break;
+->  src = consumer_addr(q);
+->  memcpy(wc, src, sizeof(*wc));
+->  advance_consumer(q);
+-> }
+
+struct ibv_mr *rxe_reg_mr(struct ibv_pd *pd, void *addr, size_t length, uint64_t hca_va, int access)
+-> ret = ibv_cmd_reg_mr(pd, addr, length, hca_va, access, vmr, &cmd, sizeof(cmd), &resp, sizeof(resp));
+->-> cmd->* =
+->-> ret = execute_cmd_write(pd->context, IB_USER_VERBS_CMD_REG_MR, cmd, cmd_size, resp, resp_size);
+->-> vmr->* =
+
+static int rxe_query_device(struct ibv_context *context,
+			    const struct ibv_query_device_ex_input *input,
+			    struct ibv_device_attr_ex *attr, size_t attr_size)
+-> struct ib_uverbs_ex_query_device_resp resp;
+-> size_t resp_size = sizeof(resp);
+-> uint64_t raw_fw_ver;
+-> unsigned int major, minor, sub_minor;
+-> int ret;
+-> ret = ibv_cmd_query_device_any(context, input, attr, attr_size, &resp, &resp_size);
+-> raw_fw_ver = resp.base.fw_ver;
+-> major = (raw_fw_ver >> 32) & 0xffff;
+-> minor = (raw_fw_ver >> 16) & 0xffff;
+-> sub_minor = raw_fw_ver & 0xffff;
+
+
+static const struct verbs_context_ops rxe_ctx_ops = {
+	.query_device_ex = rxe_query_device,
+	.query_port = rxe_query_port,
+	.alloc_pd = rxe_alloc_pd,
+	.dealloc_pd = rxe_dealloc_pd,
+	.reg_mr = rxe_reg_mr,
+	.dereg_mr = rxe_dereg_mr,
+	.alloc_mw = rxe_alloc_mw,
+	.dealloc_mw = rxe_dealloc_mw,
+	.bind_mw = rxe_bind_mw,
+	.create_cq = rxe_create_cq,
+	.create_cq_ex = rxe_create_cq_ex,
+	.poll_cq = rxe_poll_cq,
+	.req_notify_cq = ibv_cmd_req_notify_cq,
+	.resize_cq = rxe_resize_cq,
+	.destroy_cq = rxe_destroy_cq,
+	.create_srq = rxe_create_srq,
+	.modify_srq = rxe_modify_srq,
+	.query_srq = rxe_query_srq,
+	.destroy_srq = rxe_destroy_srq,
+	.post_srq_recv = rxe_post_srq_recv,
+	.create_qp = rxe_create_qp,
+	.create_qp_ex = rxe_create_qp_ex,
+	.query_qp = rxe_query_qp,
+	.modify_qp = rxe_modify_qp,
+	.destroy_qp = rxe_destroy_qp,
+	.post_send = rxe_post_send,
+	.post_recv = rxe_post_recv,
+	.create_ah = rxe_create_ah,
+	.destroy_ah = rxe_destroy_ah,
+	.attach_mcast = ibv_cmd_attach_mcast,
+	.detach_mcast = ibv_cmd_detach_mcast,
+	.free_context = rxe_free_context,
+};

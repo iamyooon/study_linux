@@ -1,0 +1,15 @@
+scheduler_tick()
+-> task_tick_dl()
+   -> update_curr_dl()
+      1) update tasks total execution time(-> se.sum_exec_runtime)
+      2) update tasks time that was running(-> se.exec_start)
+      3) update available runtime of task(-> dl_se.runtime)
+      4) runtime overrun??
+      4.1) yes
+      4.1.1) dequeue task from deadline rq
+      4.1.2) start dl timer for enqueuing task and dl_se->dl_throttled = 1
+             OR
+	     enqueue now
+      4.2) no
+      4.2.1) do nothing
+

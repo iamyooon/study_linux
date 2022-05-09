@@ -1,0 +1,208 @@
+**********************************
+* 1. mutex_lock() codeflow
+**********************************
+
+  CONFIG_DEBUG_LOCK_ALLOC                    !CONFIG_DEBUG_LOCK_ALLOC
+       mutex_lock()                                mutex_lock()
+           |                                            |
+           |                                       might_sleep()
+           V                                            |
+   mutex_lock_nested()                                  |
+           |                                            v
+	   |                                   mutex_fastpath_lock()
+	   |                      <mutex-xchg.h>        |<mutex-null.h>       <mutex-dec.h>
+           |                      --------------------------------------------
+      might_sleep()               |based on xchg()      | based on NOP       | based on atomic
+           |                      |                     |                    |
+           |                 atomic_xchg()              |           atomic_dec_return()
+	   |                      |                     |                    |
+	   |                yes   |                     |                    |    yes
+	   |       return <--- success?                 |                success? ---> return
+           |                      |no                   |                  no|
+           |                      --------------------------------------------
+           |                                            |
+           |			                        V
+           |				      __mutex_lock_slowpath()
+	   |                                            |
+	   |                                            |
+	   |                                            |
+	   ---------------> __mutex_lock_common() <------
+
+
+**********************************
+* 1-1. __mutex_lock_common() codeflow
+**********************************
+
+__mutex_lock_common() -------
+                            |
+                            |--- 커널 선점 비활성화, mutex lock하는 도중에 발생할 수 있는 선점에 의해
+			    |    중간에 cpu를 빼앗기는것을 방지하기 위한 조치
+                            |
+                            |--- mutex_acquire_nest() <- CONFIG_LOCKDEP
+                            |--- mutex_optimistic_spin() <- CONFIG_MUTEX_SPIN_ON_OWNER
+                            |
+                            |--- mutex 에 접근하는 것조차 직렬화하기 위해 spinlock 잡기
+		            |
+		            |--- 뮤텍스를 락 할수 있다면(!mutex_is_locked()) 락한다.
+			    |    락했다면 wait할 필요가 없으므로 wait 루틴 건너띈다(goto nowait)
+		            |
+			    |--- debug_mutex_lock_common() <-  CONFIG_DEBUG_MUTEXES
+			    |--- debug_mutex_add_waiter() <- CONFIG_DEBUG_MUTEXES
+			    |
+			    |--- mutex를 잠그려고 시도했지만 못잠근 current 태스크를 mutex의 waitqueue의 끝에 추가
+			    |
+			    |--- lock_contended() <- CONFIG_LOCK_STAT
+			    |
+			    |--- for(;;;) -> waiter가 mutex를 잠금하기 위한 루틴
+			            |
+				    |--- 뮤텍스를 기다리는 waiter가 없다면 뮤텍스를 잡고 반복문을 빠져나감
+			            |
+			            |--- 처리할 시그널이 있다면 ret = -EINTR, goto err
+
+				    |--- 태스크를 TASK_UNINTERRUPTIBLE 상태로 변경
+				    |--- 락을 못잡았으므로 다른 놈이 여기까지 오면서 락잠금을 시도할 수 있게
+				    |    스핀락을 언락함.
+			            |
+				    |--- mutex가 unlock될 때까지 기다리기 위해 cpu 양보
+				    |
+				    |--- mutex가 unlock되어 깨어났으므로 다시 뮤텍스를 잡는 과정을 직렬화한 후
+				    |    잠금을 시도하기 위해 spinlock을 락함.
+			    |-------|
+                            |
+			    |--- 현재 태스크를 뮤텍스의 wait_list에서 제거한다.
+			    |
+			    |--- 뮤텍스를 잡으려는 시도를 하고 있는 태스크가 없다면, 뮤텍스를 락한다(count = 0)
+			    |
+                            |--- debug_mutex_free_waiter()
+
+
+**********************************
+* 2. mutex_unlock() codeflow
+**********************************
+ mutex_unlock() ----|
+                    |-- lock->owner = NULL
+                    |
+		    |-- __mutex_fastpath_unlock()
+	       <mutex-dec.h>      |<mutex-null.h>   <mutex-xchg.h>
+		---------------------------------------
+		|                 |                   |
+       atomic_inc_return()        |             atomic_xchg()
+	        |                 |                   |
+          prev_count != 0         |           prev_count != 0
+	        |                 |                   |
+	 -------|                 |                   |-------
+      no |   yes|---------------->|<------------------| yes  |no
+	 |                        |                          |
+	 v                        v                          v
+      return        __mutex_unlock_slowpath()             return
+
+
+*************************************************
+* 2. __mutex_unlock_common_slowpath () codeflow
+*************************************************
+
+__mutex_unlock_
+common_slowpath() ----|
+                      |------------------  __mutex_slowpath_needs_to_unlock()
+		      |             <mutex-dec.h>         |<mutex-null.h>       <mutex-xchg.h>
+		      |               -------------------------------------------
+		      |               |                   |                     |
+		      |            define 1           define 1               define 0
+		      |               |                   |                     |
+		      |               |-------------------|                   return
+		      |                         |
+		      |                         v
+		      |                   lock->count = 1
+		      |
+		      |-- 뮤텍스에 대한 접근을 직렬화 하기 위한 스핀락을 잡음
+		      |
+		      |-- waiter가 존재한다면 waitqueue의 첫번째 waiter를 깨움
+		      |
+		      |-- 뮤텍스의 스핀락을 잠금해제함
+
+
+example
+
+1) mutex init
+
+----mutex------
+| .count = 1  |
+| .wait_lock  |
+| = UNLOCKED  |
+| .wait_list  |
+| = NULL      |
+---------------
+
+2) task-1 try to lock it
+
+2-1) acquire spinlock      2-2) lock mutex     2-3) set owner to      2-4) unlock spinlock
+of mutex for serializing       (count = 0)          task-1                 of mutex
+locking mutex
+----mutex------            ---- mutex ----       ---- mutex ----         ---- mutex ----
+| .count = 1  |            | .count = 0  |       | .count = 0  |         | .count = 0  |
+| .wait_lock  |            | .wait_lock  |       | .wait_lock  |         | .wait_lock  |
+| = LOCKED    | ------>    | = LOCKED    | --->  | = LOCKED    |         | = UNLOCKED  |
+| .wait_list  |            | .wait_list  |       | .wait_list  | ----->  | .wait_list  |
+| = NULL      |            | = NULL      |       | = NULL      |         | = NULL      |
+---------------            ---------------       | .owner      |         | .owner      |
+                                                 | = task-1    |         | = task-1    |
+					         ---------------         ---------------
+
+3) task-2 try to lock it
+
+3-1) acquire spinlock     3-2) try to lock mutex  3-3) retry to lock mutex    3-4) unlock spinlock
+of mutex                    but already locked       and count = -1                of mutex and
+                            so add task-2 to         becasue task-2 is there      task-2 goto sleep
+			    waitqueue as waiter
+----mutex------            ---- mutex ----            ---- mutex ----           ---- mutex ----
+| .count = 0  |            | .count = 0  |            | .count = -1 |           | .count = -1 |
+| .wait_lock  |            | .wait_lock  |            | .wait_lock  |           | .wait_lock  |
+| = LOCKED    | ------>    | = LOCKED    | ----->     | = LOCKED    |           | = UNLOCKED  |
+| .wait_list  |            | .wait_list  |            | .wait_list  | ----->    | .wait_list  |
+| = NULL      |            | = task-2    |            | = task-2    |           | = task-2    |
+| .owner      |            | .owner      |            | .owner      |           | .owner      |
+| = task-1    |            | = task-1    |            | = task-1    |           | = task-1    |
+---------------		   ---------------            ---------------           ---------------
+
+4) task-3 try to lock it
+
+3-1) acquire spinlock     3-2) try to lock mutex  3-3) retry to lock mutex    3-4) unlock spinlock
+of mutex                    but already locked       but count = -1                of mutex and
+                            so add task-3 to         becasue t2,t3 are there      task-3 goto sleep
+			    waitqueue as waiter
+----mutex------            ---- mutex ----           ---- mutex ----           ---- mutex ----
+| .count = -1 |            | .count = -1 |            | .count = -1 |           | .count = -1 |
+| .wait_lock  |            | .wait_lock  |            | .wait_lock  |           | .wait_lock  |
+| = LOCKED    | ------>    | = LOCKED    | ----->     | = LOCKED    |           | = UNLOCKED  |
+| .wait_list  |            | .wait_list  |            | .wait_list  | ----->    | .wait_list  |
+| = task-2    |            | = t2->t3    |            | = t2->t3    |           | = t2->t3    |
+| .owner      |            | .owner      |            | .owner      |           | .owner      |
+| = task-1    |            | = task-1    |            | = task-1    |           | = task-1    |
+---------------		   ---------------            ---------------           ---------------
+
+5) task-1 do unlock
+
+5-1) clear owner           5-2) unlock mutex          5-3) acquire spinlock    5-4) wake waiter up
+of mutex                   and count =1(mutex-dec.h)       of mutex
+----mutex------            ---- mutex ----            ---- mutex ----           ---- mutex ----
+| .count = -1 |            | .count = 1  |            | .count = 1  |           | .count = 1  |
+| .wait_lock  |            | .wait_lock  |            | .wait_lock  |           | .wait_lock  |
+| = UNLOCKED  | ------>    | = UNLOCKED  | ----->     | = LOCKED    |           | = LOCKED    |
+| .wait_list  |            | .wait_list  |            | .wait_list  | ----->    | .wait_list  |
+| = t2->t3    |            | = t2->t3    |            | = t2->t3    |           | = t2->t3    |
+| .owner      |            | .owner      |            | .owner      |           | .owner      |
+| = NULL      |            | = NULL      |            | = NULL      |           | = NULL      |
+---------------		   ---------------            ---------------           ---------------
+
+5-5) unlock spinlock       5-6) task-2 wkup and       5-7) t2 try to            5-8) remove t2 from waitqueue
+of mutex                   lock spinlock of mutex     lock mutex and success    and check waitqueue is empty
+                                                      and break for loop        but not empty and set owner and unlock spinlock
+----mutex------            ---- mutex ----            ---- mutex ----           ---- mutex ----
+| .count = 1  |            | .count = 1  |            | .count = -1 |           | .count = 1  |
+| .wait_lock  |            | .wait_lock  |            | .wait_lock  |           | .wait_lock  |
+| = UNLOCKED  | ------>    | = LOCKED    | ----->     | = LOCKED    |           | = UNLOCKED  |
+| .wait_list  |            | .wait_list  |            | .wait_list  | ----->    | .wait_list  |
+| = t2->t3    |            | = t2->t3    |            | = t2->t3    |           | = t3        |
+| .owner      |            | .owner      |            | .owner      |           | .owner      |
+| = NULL      |            | = NULL      |            | = NULL      |           | = t2        |
+---------------		   ---------------            ---------------           ---------------

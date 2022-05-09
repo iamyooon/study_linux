@@ -1,0 +1,15 @@
+
+sys_reboot
+    |
+    |
+    |-----------------------------------------|
+    |                                         |
+    |                            LINUX_REBOOT_CMD_POWER_OFF
+LINUX_REBOOT_CMD_RESTART                     |
+        |                                    V
+        V                            kernel_power_off()
+ kernel_restart(NULL)                        |
+        |                                    |
+        |                                    V
+        V                            machine_power_off()
+ machine_restart(cmd)

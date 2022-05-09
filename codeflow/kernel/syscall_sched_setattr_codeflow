@@ -1,0 +1,26 @@
+call systemcall
+sched_setattr()             *Userspace
+-------------------------------------------
+sys_sched_setattr()
+ 1) check invalid parameter -> return -EINVAL
+ 2) copy @uattr to attr
+ 3) check invalid attr.sched_policy -> return -EINVAL
+ 4) get task_struct pointer using @pid
+ -> sched_setattr(p, &attr)
+    -> __sched_setscheduler(p, attr, true, true)
+       1) check invalid policy -> return -EINVAL
+       2) if policy < 0,
+          policy = oldpolicy = p->policy
+       3) set reset_on_fork
+       4) lock tasks rq lock
+       5) dequeue task if enqueued
+       6) call put_prev_task() if task is curr
+       7) call __setscheduler() -------------------------> __setscheduler()
+                                                           1) call _setscheduler_params() -------------------> __setscheduler_params()
+                                                           2) set scheduling class(p->sched_class)             1) set tasks scheduling policy(p->policy) 
+							      using normal priority                            2) call __setparam_dl()---------
+       8) call set_curr_task() if task is curr                                                                                                |
+       9) enqueue task if enqueued                                                                                                     __setparam_dl()
+       10) unlock tasks rq lock                                                                                                        1) init dl timer
+                                                                                                                                       2) dl_throttled = 0
+																       3) dl_new = 1

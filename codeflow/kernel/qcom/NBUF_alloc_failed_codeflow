@@ -1,0 +1,13 @@
+htt_rx_msdu_buff_replenish() htt_rx_attach()
+        |                           |
+	|---------------------------|
+        v
+htt_rx_ring_fill_n()
+        |
+        v
+adf_rx_nbuf_alloc()
+        |
+        v
+__adf_rx_nbuf_alloc() adf_nbuf_alloc()
+
+
