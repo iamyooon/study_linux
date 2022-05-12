@@ -24,7 +24,7 @@ int main(void)
 	for (i = 4; i >= 0; i--)
 	{
 		done[i] = 1;
-		rc = pthread_join(threads[i], status);
+		rc = pthread_join(threads[i], &status);
 		printf("%p\n", status);
 		if (rc == 0)
 		{

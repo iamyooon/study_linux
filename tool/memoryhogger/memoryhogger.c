@@ -18,6 +18,7 @@ int main(int argc, char** argv)
 			buf = malloc(1024*1024);
 			printf("after malloc(), %p\n", buf);
 			memset(buf, '2', 1024*1024);
+			return 0;
 		}
 	} else {
 		printf("memoryhogger using mmap\n");

@@ -358,11 +358,11 @@ rping_run_client(struct rping_cb *cb)
 rping_run_server(struct rping_cb *cb)
 -> rping_bind_server(cb);
 ->-> if (cb->sin.ss_family == AF_INET)
-->->  ((struct sockaddr_in *) &cb->sin)->sin_port = cb->port;
-->-> else
-->->  ((struct sockaddr_in6 *) &cb->sin)->sin6_port = cb->port;
-->-> ret = rdma_bind_addr(cb->cm_id, (struct sockaddr *) &cb->sin);
-->-> ret = rdma_listen(cb->cm_id, 3);
+->->  ((struct sockaddr_in *) &cb->sin)->sin_port = cb->port; else ((struct sockaddr_in6 *) &cb->sin)->sin6_port = cb->port;
+->-> rdma_bind_addr(cb->cm_id, (struct sockaddr *) &cb->sin);
+->->-> tbd
+->-> rdma_listen(cb->cm_id, 3);
+->->-> tbd
 ->->-> CMA_INIT_CMD(&cmd, sizeof cmd, LISTEN);
 ->->-> id_priv = container_of(id, struct cma_id_private, id);
 ->->-> cmd.id = id_priv->handle;
@@ -392,19 +392,23 @@ rping_run_server(struct rping_cb *cb)
 ->->->-> }
 -> sem_wait(&cb->sem);
 -> rping_setup_qp(cb, cb->child_cm_id);
+tbd
 ->-> cb->pd = ibv_alloc_pd(cm_id->verbs);
 ->-> cb->channel = ibv_create_comp_channel(cm_id->verbs);
 ->-> cb->cq = ibv_create_cq(cm_id->verbs, RPING_SQ_DEPTH * 2, cb, cb->channel, 0);
 ->-> ret = ibv_req_notify_cq(cb->cq, 0);
 ->-> ret = rping_create_qp(cb);
 -> rping_setup_buffers(cb);
+tbd
 -> ibv_post_recv(cb->qp, &cb->rq_wr, &bad_wr);
 ->-> rxe_post_recv(cb->qp, &cb->rq_wr, &bad_wr);
 -> pthread_create(&cb->cqthread, NULL, cq_thread, cb);
 -> rping_accept(cb);
 ->-> if (cb->self_create_qp) {
 ->->  ret = rping_self_modify_qp(cb, cb->child_cm_id);
+tbd
 ->->  rping_init_conn_param(cb, &conn_param);
+tbd
 ->->  ret = rdma_accept(cb->child_cm_id, &conn_param);
 ->-> }
 ->-> else ret = rdma_accept(cb->child_cm_id, NULL);

@@ -1,5 +1,5 @@
-#CC ?= arm-linux-gnueabi-gcc
-CC ?= gcc
+CC = arm-linux-gnueabi-gcc
+#CC ?= gcc
 
 all: test_example
 

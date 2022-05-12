@@ -5,9 +5,12 @@
 
 int main()
 {
-	if(getenv("LD_PRELOAD"))
+	char *string = NULL;
+	string = getenv("LD_PRELOAD");
+	if(string){
 		printf("LD_PRELOAD detected through getenv()\n");
-	else
+		printf("string = %s\n", string);
+	} else
 		printf("Environment is clean\n");
 
 	if(open("/etc/ld.so.preload", O_RDONLY) > 0)

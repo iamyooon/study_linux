@@ -179,23 +179,25 @@ dump-capture 커널 설정 옵션들(아키텍쳐 의존적인 사항)
    CONFIG_SMP=y인 경우에는 dump-capture 커널을 로드 할 때 부트파라미터로 maxcpus=1을 지정한다.("dump-capture 커널 로딩"절 참조).
 
 3) If one wants to build and use a relocatable kernel, Enable "Build a relocatable kernel" support under "Processor type and features"
-3) relocatable 커널을 빌드하고 사용하려면 "Processor type and features"에서 "Build a relocatable kernel" 항목을 활성화한다. 
+3) relocatable 커널을 빌드하고 사용하려면 "Processor type and features"에서 "Build a relocatable kernel" 항목을 활성화한다.
 
    CONFIG_RELOCATABLE=y
 
 4) Use a suitable value for "Physical address where the kernel is loaded" (under "Processor type and features"). This only appears when "kernel crash dumps" is enabled. A suitable value depends upon whether kernel is relocatable or not.
-4) "커널이로드 된 실제 주소"( "프로세서 유형 및 기능"에서)에 적합한 값을 사용하십시오. 이는 "커널 크래시 덤프"가 활성화 된 경우에만 나타납니다. 적절한 값은 커널의 재배치 가능 여부에 달려 있다.
+4) "Physical address where the kernel is loaded"( "Processor type and features" 아래에)에 적합한 값을 사용한다. 이 설정은 "kernel crash dump" 항목(CONFIG_KDUMP)이 활성화 된 경우에만 나타난다. 적절한 값은 커널의 relocatable한지 여부에 달려 있다.
 
    If you are using a relocatable kernel use CONFIG_PHYSICAL_START=0x100000 This will compile the kernel for physical address 1MB, but given the fact kernel is relocatable, it can be run from any physical address hence kexec boot loader will load it in memory region reserved for dump-capture kernel.
-      재배치 가능 커널을 사용하는 경우 CONFIG_PHYSICAL_START = 0x100000을 사용하십시오. 실제 주소가 1MB 인 커널을 컴파일하지만 실제 커널이 재배치 가능하다면 임의의 실제 주소에서 실행될 수 있으므로 kexec 부트 로더는 덤프 용으로 메모리 영역에로드한다 - 커널 캡처.
+   만약 CONFIG_PHYSICAL_START=-0x100000을 사용하는 relocatable kernel을 사용하는 경우 실제 주소가 1MB 인 커널로 컴파일 할 것이다. 물론 커널이 relocatable하므로 어디서든 실행될 수 있으므로 kexec boot loader는 커널을 dump-capture kernel을 위해 예약된  메모리영역에 로드될 것이다.
 
    Otherwise it should be the start of memory region reserved for second kernel using boot parameter "crashkernel=Y@X". Here X is start of memory region reserved for dump-capture kernel.  Generally X is 16MB (0x1000000). So you can set CONFIG_PHYSICAL_START=0x1000000
-      그렇지 않으면 부팅 매개 변수 "crashkernel = Y @ X"를 사용하여 두 번째 커널 용으로 예약 된 메모리 영역의 시작이어야한다. 여기서 X는 dump-capture 커널 용으로 예약 된 메모리 영역의 시작이다. 일반적으로 X는 16MB (0x1000000)이다. 따라서 CONFIG_PHYSICAL_START = 0x1000000을 설정할 수 있다.
+   그렇지 않으면 부팅 파라미터 "crashkernel=Y@X"를 사용하여 두 번째 커널 용으로 예약 된 메모리 영역에 로드되어야 한다. 여기서 X는 dump-capture 커널 용으로 예약 된 메모리 영역의 시작주소이다. 일반적으로 X는 16MB(0x1000000)이다. 따라서 CONFIG_PHYSICAL_START=0x1000000을 설정할 수 있다.
 
 5) Make and install the kernel and its modules. DO NOT add this kernel to the boot loader configuration files.
-5) 커널과 모듈을 만들고 설치하십시오. 이 커널을 부트 로더 구성 파일에 추가하지 마십시오.
+5) 커널과 모듈을 만들고 설치한다. 이 커널을 부트 로더 구성 파일에 추가하면 안된다.
+(역주. 일반적인 부팅용 커널로 설정해서 사용하지 말라는 의미)
 
 Dump-capture kernel config options (Arch Dependent, ppc64)
+dump-capture 커널의 설정옵션(ppc64 아키텍쳐 의존적인 내용)
 ----------------------------------------------------------
 
 1) Enable "Build a kdump crash kernel" support under "Kernel" options:
@@ -209,94 +211,105 @@ Dump-capture kernel config options (Arch Dependent, ppc64)
    Make and install the kernel and its modules.
 
 Dump-capture kernel config options (Arch Dependent, ia64)
+dump-capture 커널 설정 옵션(ia64 아키텍쳐 의존적인 내용)
 ----------------------------------------------------------
 
 - No specific options are required to create a dump-capture kernel for ia64, other than those specified in the arch independent section above. This means that it is possible to use the system kernel as a dump-capture kernel if desired.
-- 위의 아치 독립 섹션에서 지정된 것 이외의 다른 옵션은 ia64 용 dump-capture 커널을 작성하는 데 필요하지 않다. 즉, 원하는 경우 dump-capture 커널로 system 커널을 사용할 수 있다.
-
+- 위에서 본 아키텍쳐 의존적이지 않은 설정외에 ia64를 위한 dump-capture kernel을 생성하기 위한 특별한 설정이 필요하지는 않다. 이것은 system 커널을 dump-capture 커널로 사용할 수 있음을 의미한다.
 
   The crashkernel region can be automatically placed by the system kernel at run time. This is done by specifying the base address as 0, or omitting it all together.
+  crashkernel 영역은 system 커널에 의해 런타임에 자동으로 결정될 수 있다. 이것은 기본 주소를 0으로 지정하거나 이 역시도 아래와 같이 생략함으로써 수행된다.
 
-   크래시 커널 영역은 런타임에 system 커널에 의해 자동으로 배치 될 수 있다. 이것은 기본 주소를 0으로 지정하거나 함께 생략함으로써 수행된다.
-
-  crashkernel=256M@0
-  or
-  crashkernel=256M
+  crashkernel=256M@0 or crashkernel=256M
 
   If the start address is specified, note that the start address of the kernel will be aligned to 64Mb, so if the start address is not then any space below the alignment point will be wasted.
-   시작 주소가 지정되면 커널의 시작 주소가 64Mb로 정렬되므로 시작 주소가 아닌 경우 정렬 지점 아래의 공간이 낭비된다.
+   시작 주소가 지정되면 커널의 시작 주소가 64Mb로 정렬되므로 시작 주소가 지정되지 않은 경우 정렬 지점 아래의 공간이 낭비된다.
 
 Dump-capture kernel config options (Arch Dependent, arm)
+dump-capture 커널 설정 옵션(arm 아키텍쳐 의존적인 내용)
 ----------------------------------------------------------
 
--   To use a relocatable kernel, Enable "AUTO_ZRELADDR" support under "Boot" options:
+- To use a relocatable kernel, Enable "AUTO_ZRELADDR" support under "Boot" options:
+- relocatable kernel을 사용하기 위해, "Boot" 옵션 아래의 AUTO_ZRELADDR을 활성화자.
 
     AUTO_ZRELADDR=y
 
 Dump-capture kernel config options (Arch Dependent, arm64)
+dump-capture 커널 설정 옵션(arm64 아키텍쳐 의존적인 내용)
 ----------------------------------------------------------
 
 - Please note that kvm of the dump-capture kernel will not be enabled on non-VHE systems even if it is configured. This is because the CPU will not be reset to EL2 on panic.
+- kvm이 설정되어 있다러다 non-VHE 시스템에서는 dump-capture 커널의 kvm이 활성화되지 않는다. 패닉시에 EL2로 리셋되지 않기 때문이다.
 
 Extended crashkernel syntax
+crashkernel 문법의 확장
 ===========================
 
 While the "crashkernel=size[@offset]" syntax is sufficient for most configurations, sometimes it's handy to have the reserved memory dependent on the value of System RAM -- that's mostly for distributors that pre-setup the kernel command line to avoid a unbootable system after some memory has been removed from the machine.
-"crashkernel = size [@offset]"구문이 대부분의 구성에 충분하지만 예약 된 메모리를 시스템 RAM의 값에 종속시키는 것이 편리 할 때가 있다. 대부분 시스템 메모리를 피하기 위해 커널 명령 줄을 사전 설정하는 배포자 용이다. 일부 메모리가 시스템에서 제거 된 후 시스템을 부팅 할 수 없습니다.
-
+"crashkernel=size[@offset]" 문법은 보통의 경우에 충분한 반면에, 가끔은 reserved memory dependent on the value of system ram을 갖는게 더 편할수도 있다. 주로 머신에서 일부 메모리가 제거되면 부팅할 수 없게 되는 시스템을 위해  커널 커맨드라인을 미리 설정하길 원하는 배포자를 위한 옵션이다.
 
 The syntax is:
+문법은 아래와 같다.
 
     crashkernel=<range1>:<size1>[,<range2>:<size2>,...][@offset] range=start-[end]
 
 For example:
+예를 들면:
 
     crashkernel=512M-2G:64M,2G-:128M
 
 This would mean:
+이것은 아래를 의미한다:
 
     1) if the RAM is smaller than 512M, then don't reserve anything (this is the "rescue" case)
+    1) RAM이 512M보다 작으면 어떤 영역도 예약하지 말자(이것은 "rescue" 케이스다)
+
     2) if the RAM size is between 512M and 2G (exclusive), then reserve 64M
+    2) RAM 크기가 512M ~ 2G (배타적) 인 경우 64M을 예약한다.
+
     3) if the RAM size is larger than 2G, then reserve 128M
-     1) RAM이 512M보다 작 으면 아무것도 예약하지 마십시오 (이것은 "복구"케이스이다)
-     2) RAM 크기가 512M ~ 2G (배타적) 인 경우 64M을 예약
-     3) RAM 크기가 2G보다 크면 128M을 예약한다.
+    3) RAM 크기가 2G보다 크면 128M을 예약한다.
 
 
 
 Boot into System Kernel
+system 커널로의 부팅
 =======================
 
 1) Update the boot loader (such as grub, yaboot, or lilo) configuration files as necessary.
-1) 필요에 따라 부트 로더 (예 : grub, yaboot 또는 lilo) 구성 파일을 업데이트한다.
-
+1) 필요에 따라 부트 로더(예 : grub, yaboot 또는 lilo)의 구성 파일을 업데이트한다.
 
 2) Boot the system kernel with the boot parameter "crashkernel=Y@X", where Y specifies how much memory to reserve for the dump-capture kernel and X specifies the beginning of this reserved memory. For example, "crashkernel=64M@16M" tells the system kernel to reserve 64 MB of memory starting at physical address 0x01000000 (16MB) for the dump-capture kernel.
-2) 부팅 매개 변수 "crashkernel = Y @ X"로 system 커널을 부팅한다. 여기서 Y는 dump-capture 커널에 예약 할 메모리 양을 지정하고 X는 예약 된 메모리의 시작을 지정한다. 예를 들어 "crashkernel = 64M @ 16M"은 dump-capture 커널에 대해 물리적 주소 0x01000000 (16MB)에서 시작하여 64MB의 메모리를 system 커널에 예약하도록 지시한다.
+2) 부팅 파라미터 "crashkernel=Y@X"로 system 커널을 부팅한다. 여기서 Y는 dump-capture 커널에게 예약해주는 메모리 양을 지정하고 X는 예약된 메모리의 시작주소를 지정한다. 예를 들어 "crashkernel=64M@16M"은 dump-capture 커널에 대해 물리적 주소 0x01000000(16MB)에서 시작하하는 64MB의 메모리를 system 커널에 예약하도록 지시한다.
 
    On x86 and x86_64, use "crashkernel=64M@16M".
+   x86, x86_64에서는 "crashkernel=64M@16M"을 사용한다.
 
    On ppc64, use "crashkernel=128M@32M".
+   ppc64에서는 "crashkernel=128M@32M"을 사용한다.
 
    On ia64, 256M@256M is a generous value that typically works.  The region may be automatically placed on ia64, see the dump-capture kernel config option notes above.  If use sparse memory, the size should be rounded to GRANULE boundaries.
-   ia64에서 256M @ 256M은 일반적으로 작동하는 관대 한 가치이다. 영역은 ia64에 자동으로 배치 될 수 있다 (위의 dump-capture 커널 구성 옵션 메모 참조). 스파 스 메모리를 사용하는 경우 크기는 GRANULE 경계로 반올림되어야한다.
+   ia64에서 256M@256M은 일반적으로 작동하는 generous value이다. 이 영역은 ia64에서 자동으로 배치될 수 있다(위의 dump-capture 커널 구성 옵션 메모 참조). sparse  메모리를 사용하는 경우 크기는 GRANULE 경계로 반올림되어야한다.
 
    On s390x, typically use "crashkernel=xxM". The value of xx is dependent on the memory consumption of the kdump system. In general this is not dependent on the memory size of the production system.
-   s390x에서는 일반적으로 "crashkernel = xxM"을 사용한다. xx의 값은 kdump 시스템의 메모리 소비에 따라 다릅니다. 일반적으로 이는 프로덕션 시스템의 메모리 크기에 종속되지 않다.
+   s390x에서는 일반적으로 "crashkernel=xxM"을 사용한다. xx의 값은 kdump 시스템의 메모리 소비에 따라 다른다. 일반적으로 이는 프로덕션 시스템의 메모리 크기에 종속되지 않다.
 
    On arm, the use of "crashkernel=Y@X" is no longer necessary; the kernel will automatically locate the crash kernel image within the first 512MB of RAM if X is not given.
-   "crashkernel = Y @ X"의 사용은 더 이상 필요하지 않다. X가 주어지지 않으면 커널은 자동으로 크래시 커널 이미지를 첫 번째 512MB RAM 내에 위치시킵니다.
+   arm에서는 "crashkernel=Y@X"의 사용은 더 이상 필요하지 않다. X가 주어지지 않으면 커널은 자동으로 크래시 커널 이미지를 첫 번째 512MB RAM 내에 위치시킵니다.
 
    On arm64, use "crashkernel=Y[@X]".  Note that the start address of the kernel, X if explicitly specified, must be aligned to 2MiB (0x200000).
-   arm64에서 "crashkernel = Y [@X]"를 사용하십시오. 커널의 시작 주소 인 X가 명시 적으로 지정되면 X는 2MiB (0x200000)로 정렬되어야한다.
+   arm64에서는 "crashkernel=Y[@X]"를 사용한다. 커널의 시작 주소인 X가 명시적으로 지정되면 X는 2MiB(0x200000)로 정렬되어야한다.
 
 
 Load the Dump-capture Kernel
+dump-capture 커널 로딩하기
 ============================
 
 After booting to the system kernel, dump-capture kernel needs to be loaded.
+system 커널이 부팅된 후에, dump-capture 커널이 로딩될 필요가 있다.
 
 Based on the architecture and type of image (relocatable or not), one can choose to load the uncompressed vmlinux or compressed bzImage/vmlinuz of dump-capture kernel. Following is the summary.
+아키텍쳐와 이미지의 타입(relocatable or not)에 따라, dump-capture 커널의 압축안된 vmlinux 혹은 압축된 bzImage/vmlinuz의 하나가 선택로딩될 수 있다. 아래는 이에 대한 요약내용이다.
 
 For i386 and x86_64:
 	- Use vmlinux if kernel is not relocatable.
@@ -340,6 +353,7 @@ If you are using an uncompressed Image, then use following command to load dump-
 Please note, that --args-linux does not need to be specified for ia64.  It is planned to make this a no-op on that architecture, but for now it should be omitted
 
 Following are the arch specific command line options to be used while loading dump-capture kernel.
+아래는 dump-capture 커널을 로딩할 때 사용할 아키텍쳐별로 정리된 커널 커맨드라인 옵션이다.
 
 For i386, x86_64 and ia64:
 	"1 irqpoll maxcpus=1 reset_devices"
@@ -357,28 +371,25 @@ For arm64:
 	"1 maxcpus=1 reset_devices"
 
 Notes on loading the dump-capture kernel:
+아래는 dump-capture 커널을 로딩할 때 유의할 사항이다.
 
 * By default, the ELF headers are stored in ELF64 format to support systems with more than 4GB memory. On i386, kexec automatically checks if the physical RAM size exceeds the 4 GB limit and if not, uses ELF32.  So, on non-PAE systems, ELF32 is always used.
-* 기본적으로 ELF 헤더는 4GB 이상의 메모리가있는 시스템을 지원하기 위해 ELF64 형식으로 저장된다. i386에서 kexec은 실제 RAM 크기가 4GB 제한을 초과하는지 자동으로 확인하고 그렇지 않은 경우 ELF32를 사용한다. 따라서 비 PAE 시스템에서는 ELF32가 항상 사용된다.
+* 기본적으로 ELF 헤더는 4GB 이상의 메모리가있는 시스템을 지원하기 위해 ELF64 형식으로 저장된다. i386에서 kexec은 실제 RAM 크기가 4GB 제한을 초과하는지 자동으로 확인하고 그렇지 않은 경우 ELF32를 사용한다. 따라서 non-PAE 시스템에서는 항상 ELF32가 사용된다.
 
   The --elf32-core-headers option can be used to force the generation of ELF32 headers. This is necessary because GDB currently cannot open vmcore files with ELF64 headers on 32-bit systems.
-  --elf32-core-headers 옵션은 ELF32 헤더의 생성을 강제하는 데 사용될 수 있다. 이것은 GDB가 현재 32 비트 시스템에서 ELF64 헤더가있는 vmcore 파일을 열 수 없기 때문에 필요한다.
-
+  --elf32-core-headers 옵션은 ELF32 헤더를 생성하게하는데 사용될 수 있다. 이것은 GDB가 현재 32비트 시스템에서 ELF64 헤더가 있는 vmcore 파일을 열 수 없기 때문에 필요하다.
 
 * The "irqpoll" boot parameter reduces driver initialization failures due to shared interrupts in the dump-capture kernel.
-* "irqpoll"부팅 매개 변수는 dump-capture 커널의 공유 인터럽트로 인한 드라이버 초기화 오류를 줄이다.
-
+* "irqpoll"부팅 파라미터는 dump-capture 커널의 공유 인터럽트로 인한 드라이버 초기화 오류를 줄이다.
 
 * You must specify <root-dev> in the format corresponding to the root device name in the output of mount command.
-* mount 명령의 출력에서 ​​루트 장치 이름에 해당하는 형식으로 <root-dev>를 지정해야한다.
+* mount 명령의 출력에서 루트디바이스 이름에  해당하는 형식으로 <root-dev>를 지정해야한다.
 
 * Boot parameter "1" boots the dump-capture kernel into single-user mode without networking. If you want networking, use "3".
-* 부트 매개 변수 "1"은 네트워킹없이 dump-capture 커널을 단일 사용자 모드로 부트한다. 네트워킹을 원하면 "3"을 사용하십시오.
-
+* 부트 매개 변수 "1"은 네트워킹없이 dump-capture 커널을 단일 사용자 모드로 부트한다. 네트워킹을 원하면 "3"을 사용한다.
 
 * We generally don' have to bring up a SMP kernel just to capture the dump. Hence generally it is useful either to build a UP dump-capture kernel or specify maxcpus=1 option while loading dump-capture kernel.  Note, though maxcpus always works, you had better replace it with nr_cpus to save memory if supported by the current ARCH, such as x86.
-* 우리는 일반적으로 덤프를 캡처하기 위해 SMP 커널을 가져와야한다. 따라서 일반적으로 dump-capture 커널을로드하거나 maxcpus = 1 옵션을 지정하여 dump-capture 커널을로드하는 것이 유용한다. maxcpus는 항상 작동하지만 x86과 같은 현재 ARCH에서 지원하는 경우 nr_cpus로 바꾸면 메모리를 절약 할 수 있다.
-
+* 우리는 일반적으로 덤프를 캡처하기 위해 SMP 커널을 사용할 필요가 없다. 따라서 dump-capture 커널을 로드하거나 maxcpus=1 옵션을 지정하여 dump-capture 커널을 로드하는 것이 유용하다. maxcpus는 항상 작동하지만 x86과 같은 요즘 cpu에서 지원한다면 nr_cpus로 바꾸면 메모리를 절약 할 수 있다.
 
 * You should enable multi-cpu support in dump-capture kernel if you intend to use multi-thread programs with it, such as parallel dump feature of makedumpfile. Otherwise, the multi-thread program may have a great performance degradation. To enable multi-cpu support, you should bring up an SMP dump-capture kernel and specify maxcpus/nr_cpus, disable_cpu_apicid=[X] options while loading it.
 * makedumpfile의 병렬 덤프 기능과 같이 다중 스레드 프로그램을 사용하려는 경우 dump-capture 커널에서 다중 CPU 지원을 활성화해야한다. 그렇지 않으면 다중 스레드 프로그램의 성능이 크게 저하 될 수 있다. 멀티 CPU 지원을 사용하려면 SMP dump-capture 커널을 불러와 maxcpus / nr_cpus, disable_cpu_apicid = [X] 옵션을로드하는 동안 지정해야한다.
@@ -386,29 +397,26 @@ Notes on loading the dump-capture kernel:
 * For s390x there are two kdump modes: If a ELF header is specified with the elfcorehdr= kernel parameter, it is used by the kdump kernel as it is done on all other architectures. If no elfcorehdr= kernel parameter is specified, the s390x kdump kernel dynamically creates the header. The second mode has the advantage that for CPU and memory hotplug, kdump has not to be reloaded with kexec_load().
 * s390x의 경우 두 가지 kdump 모드가 있다. ELF 헤더가 elfcorehdr = kernel 매개 변수로 지정되면 kdump 커널이 다른 모든 아키텍처에서 수행 한 것처럼 사용된다. elfcorehdr = kernel 매개 변수가 지정되지 않으면 s390x kdump 커널이 동적으로 헤더를 만듭니다. 두 번째 모드는 CPU 및 메모리 핫 플러그의 경우 kdump를 kexec_load ()로 다시로드하지 않아도된다는 장점이 있다.
 
-
-
 * For s390x systems with many attached devices the "cio_ignore" kernel parameter should be used for the kdump kernel in order to prevent allocation of kernel memory for devices that are not relevant for kdump. The same applies to systems that use SCSI/FCP devices. In that case the "allow_lun_scan" zfcp module parameter should be set to zero before setting FCP devices online.
-* 연결된 장치가 많은 s390x 시스템의 경우 kdump 커널과 관련이없는 장치의 커널 메모리 할당을 방지하기 위해 "cio_ignore"커널 매개 변수를 kdump 커널에 사용해야한다. SCSI / FCP 장치를 사용하는 시스템에도 동일하게 적용된다. 이 경우 FCP 장치를 온라인으로 설정하기 전에 "allow_lun_scan"zfcp 모듈 매개 변수를 0으로 설정해야한다.
-
+* 연결된 장치가 많은 s390x 시스템의 경우 kdump 커널과 관련이 없는 장치의 커널 메모리 할당을 방지하기 위해 "cio_ignore"커널 매개 변수를 kdump 커널에 사용해야한다. SCSI/FCP 장치를 사용하는 시스템에도 동일하게 적용된다. 이 경우 FCP 장치를 온라인으로 설정하기 전에 "allow_lun_scan"zfcp 모듈 매개 변수를 0으로 설정해야한다.
 
 Kernel Panic
 ============
 
 After successfully loading the dump-capture kernel as previously described, the system will reboot into the dump-capture kernel if a system crash is triggered.  Trigger points are located in panic(), die(), die_nmi() and in the sysrq handler (ALT-SysRq-c).
-앞에서 설명한대로 dump-capture 커널을 성공적으로로드 한 후 시스템 충돌이 발생하면 dump-capture 커널로 시스템이 재부팅된다. 트리거 포인트는 panic (), die (), die_nmi () 및 sysrq 핸들러 (ALT-SysRq-c)에 있다.
+앞에서 설명한대로 dump-capture 커널을 성공적으로 로드 한 후 시스템 충돌이 발생하면 dump-capture 커널로 시스템이 재부팅된다. 트리거 포인트는 panic(), die(), die_nmi() 및 sysrq 핸들러(ALT-SysRq-c)에 있다.
 
 The following conditions will execute a crash trigger point:
-다음 조건은 크래시 트리거 지점을 실행한다.
+다음 조건은 크래시 트리거 지점을 실행하는 것이다.
 
-If a hard lockup is detected and "NMI watchdog" is configured, the system will boot into the dump-capture kernel ( die_nmi() ).
-하드 록업이 감지되고 "NMI 워치 독"이 구성되면 시스템은 dump-capture 커널 (die_nmi ())로 부팅한다.
+If a hard lockup is detected and "NMI watchdog" is configured, the system will boot into the dump-capture kernel ( die_nmi()).
+하드 록업이 감지되고 "NMI 워치독"이 구성되면 시스템은 dump-capture 커널(die_nmi())로 부팅한다.
 
 If die() is called, and it happens to be a thread with pid 0 or 1, or die() is called inside interrupt context or die() is called and panic_on_oops is set, the system will boot into the dump-capture kernel.
-die ()가 호출되고 pid가 0 또는 1 인 쓰레드이거나 die ()가 인터럽트 컨텍스트 내에서 호출되거나 die ()가 호출되고 panic_on_oops가 설정되면 시스템은 dump-capture 커널로 부팅한다 .
+die()가 호출되고 pid가 0 또는 1 인 쓰레드이거나 die()가 인터럽트 컨텍스트 내에서 호출되거나 die()가 호출되고 panic_on_oops가 설정되면 시스템은 dump-capture 커널로 부팅한다 .
 
 On powerpc systems when a soft-reset is generated, die() is called by all cpus and the system will boot into the dump-capture kernel.
-soft-reset이 생성 될 때 powerpc 시스템에서 die ()가 모든 cpus에 의해 호출되고 시스템은 dump-capture 커널로 부팅한다.
+soft-reset이 생성 될 때 powerpc 시스템에서 die()가 모든 cpus에 의해 호출되고 시스템은 dump-capture 커널로 부팅한다.
 
 For testing purposes, you can trigger a crash by using "ALT-SysRq-c", "echo c > /proc/sysrq-trigger" or write a module to force the panic.
 테스트 목적으로, "ALT-SysRq-c", "echo c> / proc / sysrq-trigger"를 사용하여 크래시를 발생 시키거나 패닉을 강요하기위한 모듈을 작성할 수 있다.
@@ -428,7 +436,7 @@ Before analyzing the dump image, you should reboot into a stable kernel.
 덤프 이미지를 분석하기 전에 안정적인 커널로 재부트해야한다.
 
 You can do limited analysis using GDB on the dump file copied out of /proc/vmcore. Use the debug vmlinux built with -g and run the following command:
-/ proc / vmcore에서 복사 된 덤프 파일에서 GDB를 사용하여 제한된 분석을 수행 할 수 있다. -g로 빌드 된 디버그 vmlinux를 사용하고 다음 명령을 실행하십시오 :
+/ proc / vmcore에서 복사 된 덤프 파일에서 GDB를 사용하여 제한된 분석을 수행 할 수 있다. -g로 빌드 된 디버그 vmlinux를 사용하고 다음 명령을 실행한다 :
 
    gdb vmlinux <dump-file>
 

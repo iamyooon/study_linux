@@ -16,7 +16,6 @@ int main(void)
 	void *status;
 
 	while(1){
-		i++;
 		rc = pthread_create(&threads[0], NULL, &thread_main, (void *)0);
 		if (rc != 0) {
 			printf("ERROR; return code from pthread_create() is %d\n", rc);
@@ -29,6 +28,7 @@ int main(void)
 			return -1;
 		}
 		printf("Completed join with thread %d status= %p\n", i, status);
+		i++;
 	}
 	return 0;
 }
@@ -36,8 +36,8 @@ int main(void)
 void *thread_main(void *arg)
 {
 	int *ptr;
-	ptr = malloc(1024);
+	ptr = malloc(4096);
 	memset(ptr, 5, 1024);
-	sleep(1);
+	usleep(1000*10);
 	return NULL;
 }
