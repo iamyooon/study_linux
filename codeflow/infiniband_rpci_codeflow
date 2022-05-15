@@ -1,0 +1,605 @@
+##################################
+# TBD
+##################################
+1. netlink send 함수는 rpci어디에 있는가?
+
+static struct pernet_operations rdma_dev_net_ops = {
+	.init = rdma_dev_init_net,
+	.exit = rdma_dev_exit_net,
+	.id = &rdma_dev_net_id,
+	.size = sizeof(struct rdma_dev_net),
+};
+
+ib_core_init(void)
+-> register_pernet_device(&rdma_dev_net_ops);
+
+struct netlink_kernel_cfg cfg = {
+	.input	= rdma_nl_rcv,
+};
+
+#define NETLINK_RDMA		20
+
+net_ns_init()
+-> setup_net()
+->-> list_for_each_entry(ops, &pernet_list, list) ops_init(ops, net);
+->->-> ops->init(net);
+->->->-> rdma_dev_init_net()
+->->->->-> rdma_nl_net_init()
+->->->->->-> netlink_kernel_create(net, NETLINK_RDMA, &cfg);
+
+
+-> rdma_nl_rcv()
+->-> rdma_nl_rcv_skb()
+->-> rdma_nl_rcv_msg()
+->->-> cb_table = get_cb_table(skb, index, op)
+->->-> cb_table[op].doit(skb, nlh, extack)
+->->->-> nldev_newlink()
+->->->->-> ops = link_ops_get(type);
+->->->->-> ops->newlink(ibdev_name, ndev) -> rpci_newlink()
+->->->->->-> rdev = ib_alloc_device(rpci_dev, ib_dev);
+->->->->->->->
+->->->->->-> rpci_init(rdev);
+->->->->->->-> rpci_init_device_param(rdev)
+->->->->->->-> rpci_init_ports(rdev)
+->->->->->->-> rpci_init_pools(rdev)
+->->->->->-> rpci_pci_init(rdev, inited_pdev);
+->->->->->-> rdev->ndev = ndev;
+->->->->->-> rpci_set_mtu(rdev, 0x400);
+->->->->->-> rpci_register_device(rdev, ibdev_name)
+->->->->->->-> set rpci->ib_dev's fields
+->->->->->->-> ib_set_device_ops(dev, &rpci_dev_ops)
+->->->->->->->-> ib_device->ops->{mmap,...} = rpci_dev_ops->{mmap,...}
+->->->->->->-> ib_device_set_netdev(&rpci->ib_dev, rpci->ndev, 1)
+
+static const struct ib_device_ops rpci_dev_ops = {
+	.mmap = rpci_mmap,
+};
+
+static struct rdma_link_ops rpci_link_ops = {
+	.type = "rpci",
+	.newlink = rpci_newlink,
+};
+
+static struct pci_driver rpci_pci_driver = {
+	.name		= DRV_NAME,
+	.id_table	= rpci_pci_table,
+	.probe		= rpci_pci_probe,
+	.remove		= rpci_pci_remove,
+};
+
+
+rpci_module_init()
+-> pci_register_driver(&rpci_pci_driver)
+->-> __pci_register_driver(driver, THIS_MODULE, KBUILD_MODNAME)
+->->-> driver_register();
+-> rdma_link_register(&rpci_link_ops)
+->-> list_add(&rpci_link_ops->list, &link_ops)
+
+rpci_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
+-> pci_enable_device(pdev)
+-> rpci_alloc_bars(pdev);
+-> pci_set_dma_mask(pdev, DMA_BIT_MASK(64));
+-> pci_set_master(pdev);
+-> inited_pdev = pdev;
+
+##################################
+# /dev/infiniband/rdma_cm
+##################################
+
+static struct miscdevice ucma_misc = {
+	.minor          = MISC_DYNAMIC_MINOR,
+	.name           = "rdma_cm",
+	.nodename       = "infiniband/rdma_cm",
+	.mode           = 0666,
+	.fops           = &ucma_fops,
+};
+
+static const struct file_operations ucma_fops = {
+	.owner   = THIS_MODULE,
+	.open    = ucma_open,
+	.release = ucma_close,
+	.write   = ucma_write,
+	.poll    = ucma_poll,
+	.llseek  = no_llseek,
+};
+
+static ssize_t (*ucma_cmd_table[])(struct ucma_file *file,
+				   const char __user *inbuf,
+				   int in_len, int out_len) = {
+	[RDMA_USER_CM_CMD_CREATE_ID] 	 = ucma_create_id,
+	[RDMA_USER_CM_CMD_DESTROY_ID]	 = ucma_destroy_id,
+	[RDMA_USER_CM_CMD_BIND_IP]	 = ucma_bind_ip,
+	[RDMA_USER_CM_CMD_RESOLVE_IP]	 = ucma_resolve_ip,
+	[RDMA_USER_CM_CMD_RESOLVE_ROUTE] = ucma_resolve_route,
+	[RDMA_USER_CM_CMD_QUERY_ROUTE]	 = ucma_query_route,
+	[RDMA_USER_CM_CMD_CONNECT]	 = ucma_connect,
+	[RDMA_USER_CM_CMD_LISTEN]	 = ucma_listen,
+	[RDMA_USER_CM_CMD_ACCEPT]	 = ucma_accept,
+	[RDMA_USER_CM_CMD_REJECT]	 = ucma_reject,
+	[RDMA_USER_CM_CMD_DISCONNECT]	 = ucma_disconnect,
+	[RDMA_USER_CM_CMD_INIT_QP_ATTR]	 = ucma_init_qp_attr,
+	[RDMA_USER_CM_CMD_GET_EVENT]	 = ucma_get_event,
+	[RDMA_USER_CM_CMD_GET_OPTION]	 = NULL,
+	[RDMA_USER_CM_CMD_SET_OPTION]	 = ucma_set_option,
+	[RDMA_USER_CM_CMD_NOTIFY]	 = ucma_notify,
+	[RDMA_USER_CM_CMD_JOIN_IP_MCAST] = ucma_join_ip_multicast,
+	[RDMA_USER_CM_CMD_LEAVE_MCAST]	 = ucma_leave_multicast,
+	[RDMA_USER_CM_CMD_MIGRATE_ID]	 = ucma_migrate_id,
+	[RDMA_USER_CM_CMD_QUERY]	 = ucma_query,
+	[RDMA_USER_CM_CMD_BIND]		 = ucma_bind,
+	[RDMA_USER_CM_CMD_RESOLVE_ADDR]	 = ucma_resolve_addr,
+	[RDMA_USER_CM_CMD_JOIN_MCAST]	 = ucma_join_multicast
+};
+
+ucma_init()
+> misc_register(&ucma_misc);
+> device_create_file(ucma_misc.this_device, &dev_attr_abi_version);
+> ucma_ctl_table_hdr = register_net_sysctl(&init_net, "net/rdma_ucm", ucma_ctl_table);
+> ib_register_client(&rdma_cma_client);
+
+ucam_open()
+> file = kmalloc(sizeof *file, GFP_KERNEL); // struct ucma_file *file
+> file->close_wq = alloc_ordered_workqueue("ucma_close_id", WQ_MEM_RECLAIM);
+> INIT_LIST_HEAD(&file->event_list); INIT_LIST_HEAD(&file->ctx_list); init_waitqueue_head(&file->poll_wait); mutex_init(&file->mut);
+> filp->private_data = file; file->filp = filp;
+> stream_open(inode, filp);
+
+ucma_write()
+> struct ucma_file *file = filp->private_data;
+> copy_from_user(&hdr, buf, sizeof(hdr))
+> hdr.cmd = array_index_nospec(hdr.cmd, ARRAY_SIZE(ucma_cmd_table));
+> ucma_cmd_table[hdr.cmd](file, buf + sizeof(hdr), hdr.in, hdr.out);
+
+ucma_poll()
+> struct ucma_file *file = filp->private_data;
+> poll_wait(filp, &file->poll_wait, wait);
+> if (!list_empty(&file->event_list)) mask = EPOLLIN | EPOLLRDNORM;
+> return mask
+
+rpci_ep_module_init()
+-> pci_epf_register_driver(&rpci_ep_driver);
+-> rdma_link_register(&rpci_ep_link_ops);
+->-> list_add(&ops->list, &link_ops)
+-> irq_scheduled_flag = false;
+
+rpci_ep_probe(epf)
+-> epf->header = &rpci_ep_pci_header;
+-> rdev = ib_alloc_device(rpci_ep_dev, ib_dev);
+->-> device = alloc ib_device structure  
+->-> device->groups[] = &ib_dev_attr_group
+->-> rdma_init_coredev(&device->coredev, device, &init_net);
+->->-> coredev->dev.class = &
+->->-> coredev->dev.class = &ib_class;
+->->-> coredev->dev.groups = dev->groups;
+->->-> coredev->owner = dev;
+->->-> INIT_LIST_HEAD(&coredev->port_list);
+-> epf_set_drvdata(epf, rdev);
+->-> epf->dev->driver_data = rdev
+-> rdev->epf = epf
+-> rdev->status = false
+-> init rdev->{cmd_handler, irq_gen_handler)
+-> rdev->wq = alloc_workqueue("rpci_ep_wq", WQ_MEM_RECLAIM | WQ_HIGHPRI, 0)
+-> rpci_ep_init(rdev);
+->-> rpci_ep_init_device_param(rdev);
+->->-> init rdev->attr
+->-> rpci_ep_init_ports(rdev);
+->-> rpci_ep_init_pools(rdev);
+-> dma_set_coherent_mask(dev, DMA_BIT_MASK(32))
+->-> mask = (dma_addr_t)mask;
+->-> dev->coherent_dma_mask = mask;
+
+static struct rdma_link_ops rpci_ep_link_ops = {
+	.type = "rpci-ep",
+	.newlink = rpci_ep_newlink,
+};
+rpci_ep_newlink(ibdev_name,ndev)
+-> rdev = inited_rdev;
+-> rdev->ndev = ndev;
+-> rpci_ep_set_mtu(rdev, 0x400);
+-> pci_epc_start(rdev->epf->epc);
+->-> epc->ops->start(epc);
+->->-> pci->ops->start_link(pci)
+-> rpci_ep_register_device(rdev, ibdev_name);
+-> rdev->ready = true;
+
+static const struct dw_pcie_ops dw_pcie_ep_ops = {
+        .read_dbi = NULL,
+        .write_dbi = NULL,
+};
+
+static const struct pci_epc_ops epc_ops = {
+        .write_header           = dw_pcie_ep_write_header,
+        .set_bar                = dw_pcie_ep_set_bar,
+        .clear_bar              = dw_pcie_ep_clear_bar,
+        .map_addr               = dw_pcie_ep_map_addr,
+        .unmap_addr             = dw_pcie_ep_unmap_addr,
+        .set_msi                = dw_pcie_ep_set_msi,
+        .get_msi                = dw_pcie_ep_get_msi,
+        .set_msix               = dw_pcie_ep_set_msix,
+        .get_msix               = dw_pcie_ep_get_msix,
+        .raise_irq              = dw_pcie_ep_raise_irq,
+        .start                  = dw_pcie_ep_start,
+        .stop                   = dw_pcie_ep_stop,
+        .get_features           = dw_pcie_ep_get_features,
+};
+
+struct ib_qp *rpci_create_qp(struct ib_pd *ibpd, struct ib_qp_init_attr *init, struct ib_udata *udata)
+-> rpci_ep_qp_chk_init(rpci, init);
+-> qp = rpci_ep_alloc(&rpci->qp_pool);
+	struct rpci_ep_pool_entry *elem;
+	ib_device_try_get(&pool->rpci->ib_dev)
+	elem = kzalloc(rpci_ep_type_info[pool->type].size, (pool->flags & RPCI_POOL_ATOMIC) ?  GFP_ATOMIC : GFP_KERNEL);
+	elem->pool = pool;
+-> rpci_ep_add_index(qp);
+	elem->index = alloc_index(pool);
+	insert_index(pool, elem);
+-> rpci_ep_qp_from_init(rpci, qp, pd, init, uresp, ibpd, udata);
+	qp->pd			= pd;
+	qp->rcq			= rcq;
+	qp->scq			= scq;
+	qp->srq			= srq;
+	rpci_ep_qp_init_misc(rpci, qp, init);
+		qp->sq_sig_type		= init->sq_sig_type;
+		qp->attr.path_mtu	= 1;
+		qp->mtu			= ib_mtu_enum_to_int(qp->attr.path_mtu);
+		qpn			= qp->pelem.index;
+		port			= &rpci->port;
+		qp->ibqp.qp_num		= 0;
+		port->qp_smi_index	= qpn;
+		qp->attr.port_num	= init->port_num;
+	rpci_ep_qp_init_req(rpci, qp, init, udata, uresp);
+		sock_create_kern(&init_net, AF_INET, SOCK_DGRAM, 0, &qp->sk);
+		qp->sk->sk->sk_user_data = qp;
+		qp->rpci = rpci;
+		qp->src_port = RPCI_ROCE_V2_SPORT + (hash_32_generic(qp_num(qp), 14) & 0x3fff);
+		qp->sq.max_wr		= init->cap.max_send_wr;
+		qp->sq.max_sge		= init->cap.max_send_sge;
+		qp->sq.max_inline	= init->cap.max_inline_data;
+		wqe_size = max_t(int, sizeof(struct rxe_send_wqe) + qp->sq.max_sge * sizeof(struct ib_sge), sizeof(struct rxe_send_wqe) + qp->sq.max_inline);
+		qp->sq.queue = rpci_ep_queue_init(rpci, &qp->sq.max_wr, wqe_size);
+			q = kmalloc(sizeof(*q), GFP_KERNEL);
+			q->rpci = rpci;
+			q->elem_size = elem_size;
+			elem_size = roundup_pow_of_two(elem_size);
+			q->log2_elem_size = order_base_2(elem_size);
+			num_slots = *num_elem + 1;
+			num_slots = roundup_pow_of_two(num_slots);
+			q->index_mask = num_slots - 1;
+			buf_size = sizeof(struct rpci_queue_buf) + num_slots * elem_size;
+			q->buf = vmalloc_user(buf_size);
+			q->buf->log2_elem_size = q->log2_elem_size;
+			q->buf->index_mask = q->index_mask;
+			q->buf_size = buf_size;
+			*num_elem = num_slots - 1;
+		ep_do_mmap_info(rpci, uresp ? &uresp->sq_mi : NULL, udata, qp->sq.queue->buf, qp->sq.queue->buf_size, &qp->sq.queue->ip);
+			if (outbuf) {
+				ip = rpci_ep_create_mmap_info(rpci, buf_size, udata, buf);
+					ip = kmalloc(sizeof(*ip), GFP_KERNEL);
+					size = PAGE_ALIGN(size);
+					ip->info.offset = rpci->mmap_offset;
+					rpci->mmap_offset += ALIGN(size, SHMLBA);
+					INIT_LIST_HEAD(&ip->pending_mmaps);
+					ip->info.size = size;
+					ip->context = container_of(udata, struct uverbs_attr_bundle, driver_udata)->context;
+					ip->obj = obj;
+				copy_to_user(outbuf, &ip->info, sizeof(ip->info));
+				list_add(&ip->pending_mmaps, &rpci->pending_mmaps);
+	}
+	*ip_p = ip;
+		qp->req.wqe_index	= producer_index(qp->sq.queue);
+		qp->req.state		= QP_STATE_RESET;
+		qp->req.opcode		= -1;
+		qp->comp.opcode		= -1;
+		rpci_ep_init_task(rpci, &qp->req.task, qp, rpci_ep_requester, "req");
+			task->obj	= obj;
+			task->arg	= arg;
+			task->func	= func;
+			snprintf(task->name, sizeof(task->name), "%s", name);
+			task->destroyed	= false;
+			tasklet_init(&task->tasklet, rpci_ep_do_task, (unsigned long)task);
+			task->state = TASK_STATE_START;
+		rpci_ep_init_task(rpci, &qp->comp.task, qp, rpci_ep_completer, "comp");
+		qp->qp_timeout_jiffies = 0; /* Can't be set for UD/UC in modify_qp */
+	rpci_ep_qp_init_resp(rpci, qp, init, udata, uresp);
+		if (!qp->srq) {
+			qp->rq.max_wr		= init->cap.max_recv_wr;
+			qp->rq.max_sge		= init->cap.max_recv_sge;
+			wqe_size = rcv_wqe_size(qp->rq.max_sge);
+			qp->rq.queue = rpci_ep_queue_init(rpci, &qp->rq.max_wr, wqe_size);
+			ep_do_mmap_info(rpci, uresp ? &uresp->rq_mi : NULL, udata, qp->rq.queue->buf, qp->rq.queue->buf_size, &qp->rq.queue->ip);
+		}
+		rpci_ep_init_task(rpci, &qp->resp.task, qp, rpci_ep_responder, "resp");
+		qp->resp.opcode		= OPCODE_NONE;
+		qp->resp.msn		= 0;
+		qp->resp.state		= QP_STATE_RESET;
+	qp->attr.qp_state = IB_QPS_RESET;
+	qp->valid = 1;
+
+
+int rpci_ep_requester(void *arg)
+	struct rpci_ep_qp *qp = (struct rpci_ep_qp *)arg;
+next_wqe:
+	wqe = req_next_wqe(qp);
+		struct rxe_send_wqe *wqe = queue_head(qp->sq.queue);
+			return q->buf->data + ((q->buf->consumer_index & q->index_mask) << q->log2_elem_size);
+		wqe = addr_from_index(qp->sq.queue, qp->req.wqe_index);
+			return q->buf->data + ((index & q->index_mask) << q->buf->log2_elem_size);
+		wqe->mask = wr_opcode_mask(wqe->wr.opcode, qp);
+	if (wqe->mask & WR_REG_MASK) {
+		if (wqe->wr.opcode == IB_WR_LOCAL_INV) {
+			struct rpci_ep_dev *rpci = to_rdev(qp->ibqp.device);
+			struct rpci_ep_mem *rmr;
+			rmr = rpci_ep_pool_get_index(&rpci->mr_pool, wqe->wr.ex.invalidate_rkey >> 8);
+			rmr->state = RPCI_MEM_STATE_FREE;
+			wqe->state = wqe_state_done;
+			wqe->status = IB_WC_SUCCESS;
+		} else if (wqe->wr.opcode == IB_WR_REG_MR) {
+			struct rpci_ep_mem *rmr = to_rmr(wqe->wr.wr.reg.mr);
+			rmr->state = RPCI_MEM_STATE_VALID;
+			rmr->access = wqe->wr.wr.reg.access;
+			rmr->lkey = wqe->wr.wr.reg.key;
+			rmr->rkey = wqe->wr.wr.reg.key;
+			rmr->iova = wqe->wr.wr.reg.mr->iova;
+			wqe->state = wqe_state_done;
+			wqe->status = IB_WC_SUCCESS;
+		}
+		if ((wqe->wr.send_flags & IB_SEND_SIGNALED) || qp->sq_sig_type == IB_SIGNAL_ALL_WR)
+			rpci_ep_run_task(&qp->comp.task, 1);
+	}
+	opcode = next_opcode(qp, wqe, wqe->wr.opcode);
+	mask = rpci_ep_opcode[opcode].mask;
+	mtu = get_mtu(qp);
+	payload = (mask & RPCI_WRITE_OR_SEND) ? wqe->dma.resid : 0;
+	skb = init_req_packet(qp, wqe, opcode, payload, &pkt);
+	fill_packet(qp, wqe, &pkt, skb, payload)
+		struct rpci_ep_dev *rpci = to_rdev(qp->ibqp.device);
+		rpci_ep_prepare(pkt, skb, &crc);
+		if (pkt->mask & RPCI_WRITE_OR_SEND) {
+			if (wqe->wr.send_flags & IB_SEND_INLINE) {
+				u8 *tmp = &wqe->dma.inline_data[wqe->dma.sge_offset];
+				crc = rpci_crc32(rpci, crc, tmp, paylen);
+				memcpy(payload_addr(pkt), tmp, paylen);
+				wqe->dma.resid -= paylen;
+				wqe->dma.sge_offset += paylen;
+			} else {
+				err = ep_copy_data(qp->pd, 0, &wqe->dma, payload_addr(pkt), paylen, from_mem_obj, &crc);
+					struct rxe_sge		*sge	= &dma->sge[dma->cur_sge];
+					int			offset	= dma->sge_offset;
+					if (sge->length && (offset < sge->length))
+						mem = ep_lookup_mem(pd, access, sge->lkey, lookup_local);
+					while (length > 0) {
+						bytes = length;
+						if (offset >= sge->length) {
+							sge++;
+							dma->cur_sge++;
+							offset = 0;
+							if (sge->length) {
+								mem = ep_lookup_mem(pd, access, sge->lkey, lookup_local);
+							} else {
+								continue;
+							}
+						}
+						if (bytes > sge->length - offset) bytes = sge->length - offset;
+						if (bytes > 0) {
+							iova = sge->addr + offset;
+							err = rpci_ep_mem_copy(mem, iova, addr, bytes, dir, crcp);
+								if (mem->type == RPCI_MEM_TYPE_DMA) {
+									u8 *src, *dest;
+									src  = (dir == to_mem_obj) ?  addr : ((void *)(uintptr_t)iova);
+									dest = (dir == to_mem_obj) ?  ((void *)(uintptr_t)iova) : addr;
+									memcpy(dest, src, length);
+							offset	+= bytes;
+							resid	-= bytes;
+							length	-= bytes;
+							addr	+= bytes;
+						}
+					}
+					dma->sge_offset = offset;
+					dma->resid	= resid;
+			}
+		}
+		p = payload_addr(pkt) + paylen + bth_pad(pkt);
+		*p = ~crc;
+	save_state(wqe, qp, &rollback_wqe, &rollback_psn);
+	update_wqe_state(qp, wqe, &pkt);
+	update_wqe_psn(qp, wqe, &pkt, payload);
+	rpci_ep_xmit_packet(qp, &pkt, skb);
+	update_state(qp, wqe, &pkt, payload);
+
+
+/* implements a simple circular buffer that can optionally be
+ * shared between user space and the kernel and can be resized
+
+ * the requested element size is rounded up to a power of 2
+ * and the number of elements in the buffer is also rounded
+ * up to a power of 2. Since the queue is empty when the
+ * producer and consumer indices match the maximum capacity
+ * of the queue is one less than the number of element slots
+ */
+
+/* this data structure is shared between user space and kernel
+ * space for those cases where the queue is shared. It contains
+ * the producer and consumer indices. Is also contains a copy
+ * of the queue size parameters for user space to use but the
+ * kernel must use the parameters in the rpci_queue struct
+ * this MUST MATCH the corresponding librpci struct
+ * for performance reasons arrange to have producer and consumer
+ * pointers in separate cache lines
+ * the kernel should always mask the indices to avoid accessing
+ * memory outside of the data area
+ */
+struct rpci_queue_buf {
+	__u32			log2_elem_size;
+	__u32			index_mask;
+	__u32			pad_1[30];
+	__u32			producer_index;
+	__u32			pad_2[31];
+	__u32			consumer_index;
+	__u32			pad_3[31];
+	__u8			data[0];
+};
+
+struct rpci_ep_qp {
+	struct rpci_ep_sq		sq;  ---------------------> struct rpci_ep_sq {
+	struct rpci_ep_rq		rq;                               struct rpci_queue	*queue; --------------------> struct rpci_queue {
+	struct rpci_ep_dev		*rpci;                      }                                                               struct rpci_queue_buf *buf;
+};                                                                                                                             }
+
+
+##################################
+# /dev/infiniband/uverb????????????????
+##################################
+
+enum ib_uverbs_write_cmds {
+/*0-4*/IB_USER_VERBS_CMD_GET_CONTEXT, IB_USER_VERBS_CMD_QUERY_DEVICE, IB_USER_VERBS_CMD_QUERY_PORT, IB_USER_VERBS_CMD_ALLOC_PD, IB_USER_VERBS_CMD_DEALLOC_PD, 
+/*5-9*/IB_USER_VERBS_CMD_CREATE_AH, IB_USER_VERBS_CMD_MODIFY_AH, IB_USER_VERBS_CMD_QUERY_AH, IB_USER_VERBS_CMD_DESTROY_AH, IB_USER_VERBS_CMD_REG_MR,
+/*10-14*/IB_USER_VERBS_CMD_REG_SMR, IB_USER_VERBS_CMD_REREG_MR, IB_USER_VERBS_CMD_QUERY_MR, IB_USER_VERBS_CMD_DEREG_MR, IB_USER_VERBS_CMD_ALLOC_MW,
+/*15-19*/IB_USER_VERBS_CMD_BIND_MW, IB_USER_VERBS_CMD_DEALLOC_MW, IB_USER_VERBS_CMD_CREATE_COMP_CHANNEL, IB_USER_VERBS_CMD_CREATE_CQ, IB_USER_VERBS_CMD_RESIZE_CQ,
+/*20-24*/IB_USER_VERBS_CMD_DESTROY_CQ, IB_USER_VERBS_CMD_POLL_CQ, IB_USER_VERBS_CMD_PEEK_CQ, IB_USER_VERBS_CMD_REQ_NOTIFY_CQ, IB_USER_VERBS_CMD_CREATE_QP,
+/*25-29*/IB_USER_VERBS_CMD_QUERY_QP, IB_USER_VERBS_CMD_MODIFY_QP, IB_USER_VERBS_CMD_DESTROY_QP, IB_USER_VERBS_CMD_POST_SEND, IB_USER_VERBS_CMD_POST_RECV,
+/*30-34*/IB_USER_VERBS_CMD_ATTACH_MCAST, IB_USER_VERBS_CMD_DETACH_MCAST, IB_USER_VERBS_CMD_CREATE_SRQ, IB_USER_VERBS_CMD_MODIFY_SRQ, IB_USER_VERBS_CMD_QUERY_SRQ,
+/*35-39*/IB_USER_VERBS_CMD_DESTROY_SRQ, IB_USER_VERBS_CMD_POST_SRQ_RECV, IB_USER_VERBS_CMD_OPEN_XRCD, IB_USER_VERBS_CMD_CLOSE_XRCD, IB_USER_VERBS_CMD_CREATE_XSRQ,
+/*40*/IB_USER_VERBS_CMD_OPEN_QP,
+};
+
+struct uapi_definition {
+	u8 kind;
+	u8 scope;
+	union {
+		struct { u16 object_id; } object_start;
+		struct {
+			u16 command_num;
+			u8 is_ex:1;
+			u8 has_udata:1;
+			u8 has_resp:1;
+			u8 req_size;
+			u8 resp_size;
+		} write;
+	};
+
+	union {
+		bool (*func_is_supported)(struct ib_device *device);
+		int (*func_write)(struct uverbs_attr_bundle *attrs);
+		const struct uapi_definition *chain;
+		const struct uverbs_object_def *chain_obj_tree;
+		size_t needs_fn_offset;
+	};
+};
+
+const struct uapi_definition uverbs_def_write_intf[] = {
+{
+	.kind = UAPI_DEF_OBJECT_START,
+	.object_start = { .object_id = UVERBS_OBJECT_AH},
+	},
+	{
+	.kind = UAPI_DEF_WRITE,
+	.scope = UAPI_SCOPE_OBJECT,
+	.write = { .is_ex = 0, .command_num = IB_USER_VERBS_CMD_CREATE_AH},
+	.func_write = ib_uverbs_create_ah,
+	.write.has_udata = 1+ ?
+	},
+	{
+	.kind = UAPI_DEF_WRITE,
+	.scope = UAPI_SCOPE_OBJECT,
+	.write = { .is_ex = 0, .command_num = IB_USER_VERBS_CMD_DESTROY_AH},
+	.func_write = ib_uverbs_destroy_ah,
+	.write.req_size = sizeof(struct ib_uvers_destroy_ah)
+	.write.has_udata = 1+ ?
+	},
+	{
+	.kind = UAPI_DEF_IS_SUPPORTED_DEV_FN,
+	.scope = UAPI_SCOPE_METHOD,
+	.needs_fn_offset = offsetof(struct ib_device_ops, destroy_ah) + BUILD_BUG_ON_ZERO(sizeof(((struct ib_device_ops *)0)->destroy_ah) != sizeof(void *)),
+	}
+	,????
+}
+
+static const struct file_operations uverbs_mmap_fops = {
+	.owner   = THIS_MODULE,
+	.write   = ib_uverbs_write,
+	.mmap    = ib_uverbs_mmap,
+	.open    = ib_uverbs_open,
+	.release = ib_uverbs_close,
+	.llseek  = no_llseek,
+	.unlocked_ioctl = ib_uverbs_ioctl,
+	.compat_ioctl = ib_uverbs_ioctl,
+};
+
+static struct ib_client uverbs_client = {
+	.name   = "uverbs",
+	.no_kverbs_req = true,
+	.add    = ib_uverbs_add_one,
+	.remove = ib_uverbs_remove_one,
+	.get_nl_info = ib_uverbs_get_nl_info,
+};
+MODULE_ALIAS_RDMA_CLIENT("uverbs");
+
+ib_uvers_init() // module_init(ib_uverbs_init);
+> register_chrdev_region(IB_UVERBS_BASE_DEV, IB_UVERBS_NUM_FIXED_MINOR, "infiniband_verbs");
+> alloc_chrdev_region(&dynamic_uverbs_dev, 0, IB_UVERBS_NUM_DYNAMIC_MINOR, "infiniband_verbs");
+> uverbs_class = class_create(THIS_MODULE, "infiniband_verbs");
+> uverbs_class->devnode = uverbs_devnode;
+> class_create_file(uverbs_class, &class_attr_abi_version.attr);
+> ib_register_client(&uverbs_client);
+
+ib_uverbs_add_one()
+> uverbs_dev = kzalloc(sizeof(*uverbs_dev), GFP_KERNEL);
+> init_srcu_struct(&uverbs_dev->disassociate_srcu);
+> device_initialize(&uverbs_dev->dev);
+> uverbs_dev->dev.class = uverbs_class; uverbs_dev->dev.parent = device->dev.parent; uverbs_dev->dev.release = ib_uverbs_release_dev; uverbs_dev->dev.groups = uverbs_dev->groups;
+> uverbs_dev->groups[0] = &dev_attr_group;
+> atomic_set(&uverbs_dev->refcount, 1);
+> init_completion(&uverbs_dev->comp);
+> uverbs_dev->xrcd_tree = RB_ROOT;
+> mutex_init(&uverbs_dev->xrcd_tree_mutex); mutex_init(&uverbs_dev->lists_mutex);
+> INIT_LIST_HEAD(&uverbs_dev->uverbs_file_list); INIT_LIST_HEAD(&uverbs_dev->uverbs_events_file_list);
+> rcu_assign_pointer(uverbs_dev->ib_dev, device);
+> uverbs_dev->num_comp_vectors = device->num_comp_vectors;
+> devnum = ida_alloc_max(&uverbs_ida, IB_UVERBS_MAX_DEVICES - 1, GFP_KERNEL);
+> uverbs_dev->devnum = devnum;
+> if (devnum >= IB_UVERBS_NUM_FIXED_MINOR) base = dynamic_uverbs_dev + devnum - IB_UVERBS_NUM_FIXED_MINOR;
+> else base = IB_UVERBS_BASE_DEV + devnum;
+> ib_uverbs_create_uapi(device, uverbs_dev)
+> uverbs_dev->dev.devt = base;
+> dev_set_name(&uverbs_dev->dev, "uverbs%d", uverbs_dev->devnum);
+> cdev_init(&uverbs_dev->cdev, device->ops.mmap ? &uverbs_mmap_fops : &uverbs_fops);
+> uverbs_dev->cdev.owner = THIS_MODULE;
+> cdev_device_add(&uverbs_dev->cdev, &uverbs_dev->dev);
+> ib_set_client_data(device, &uverbs_client, uverbs_dev);
+
+ib_uverbs_open()
+> dev = container_of(inode->i_cdev, struct ib_uverbs_device, cdev);
+> ib_dev = srcu_dereference(dev->ib_dev, &dev->disassociate_srcu);
+> file = kzalloc(sizeof(*file), GFP_KERNEL);
+> file->device	 = dev;
+> filp->private_data = file;
+> list_add_tail(&file->list, &dev->uverbs_file_list);
+> return stream_open(inode, filp);
+
+ib_uverbs_write()
+> copy_from_user(&hdr, buf, sizeof(hdr))
+> method_elm = uapi_get_method(uapi, hdr.command);
+> verify_hdr(&hdr, &ex_hdr, count, method_elm);
+> srcu_key = srcu_read_lock(&file->device->disassociate_srcu);
+> buf += sizeof(hdr);
+> memset(bundle.attr_present, 0, sizeof(bundle.attr_present));
+> bundle.ufile = file; bundle.context = NULL;
+> if (!method_elm->is_ex) {
+>> set bundle.driver_udata
+>> ib_uverbs_init_udata_buf_or_null( &bundle.ucore, buf, u64_to_user_ptr(response), in_len, out_len);
+> else
+>> buf += sizeof(ex_hdr);
+>> ib_uverbs_init_udata_buf_or_null(&bundle.ucore, buf, u64_to_user_ptr(ex_hdr.response), hdr.in_words * 8, hdr.out_words * 8);
+>> ib_uverbs_init_udata_buf_or_null( &bundle.driver_udata, buf + bundle.ucore.inlen, u64_to_user_ptr(ex_hdr.response) + bundle.ucore.outlen, ex_hdr.provider_in_words * 8, ex_hdr.provider_out_words * 8);
+> method_elm->handler(&bundle);
+
+ib_uvebrs_ioctl()
+> struct ib_uverbs_file *file = filp->private_data;
+> struct ib_uverbs_ioctl_hdr __user *user_hdr = (struct ib_uverbs_ioctl_hdr __user *)arg;
+> copy_from_user(&hdr, user_hdr, sizeof(hdr));
+> ib_uverbs_cmd_verbs(file, &hdr, user_hdr->attrs);
+
+ib_uverbs_mmap()
+> struct ib_uverbs_file *file = filp->private_data;
+> ucontext = ib_uverbs_get_ucontext_file(file);
+> ucontext->device->ops.mmap(ucontext, vma);
