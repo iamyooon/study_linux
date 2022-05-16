@@ -144,11 +144,62 @@ ucam_open()
 > filp->private_data = file; file->filp = filp;
 > stream_open(inode, filp);
 
-ucma_write()
+static ssize_t ucma_write(struct file *filp, const char __user *buf, size_t len, loff_t *pos)
 > struct ucma_file *file = filp->private_data;
 > copy_from_user(&hdr, buf, sizeof(hdr))
 > hdr.cmd = array_index_nospec(hdr.cmd, ARRAY_SIZE(ucma_cmd_table));
 > ucma_cmd_table[hdr.cmd](file, buf + sizeof(hdr), hdr.in, hdr.out);
+
+// ucma_bind when hdr.cmd is [RDMA_USER_CM_CMD_BIND]
+static ssize_t ucma_bind(struct ucma_file *file, const char __user *inbuf, int in_len, int out_len)
+> copy_from_user(&cmd, inbuf, sizeof(cmd))
+> ucma_get_ctx(file, cmd.id);
+>> ctx = _ucma_find_context(id, file);
+>>> ctx = xa_load(&ctx_table, id);
+> rdma_bind_addr(ctx->cm_id, (struct sockaddr *) &cmd.addr);
+>> id_priv = container_of(id, struct rdma_id_private, id);
+>> cma_check_linklocal(&id->route.addr.dev_addr, addr);
+>> memcpy(cma_src_addr(id_priv), addr, rdma_addr_size(addr));
+>> daddr = cma_dst_addr(id_priv);
+>>> (struct sockaddr *) &id_priv->id.route.addr.dst_addr;
+>> daddr->sa_family = addr->sa_family;
+>> cma_get_port(id_priv);
+>>> if (cma_family(id_priv) != AF_IB) ps = cma_select_inet_ps(id_priv);
+>>>> switch (id_priv->id.ps)
+>>>> case RDMA_PS_TCP:
+>>>> case RDMA_PS_UDP:
+>>>> case RDMA_PS_IPOIB:
+>>>> case RDMA_PS_IB: return id_priv->id.ps;
+>>> else ps = cma_select_ib_ps(id_priv);
+>>>> sib = (struct sockaddr_ib *) cma_src_addr(id_priv);
+>>>> mask = be64_to_cpu(sib->sib_sid_mask) & RDMA_IB_IP_PS_MASK;
+>>>> sid = be64_to_cpu(sib->sib_sid) & mask;
+>>>> if ((id_priv->id.ps == RDMA_PS_IB) && (sid == (RDMA_IB_IP_PS_IB & mask)))sid_ps = RDMA_IB_IP_PS_IB; ps = RDMA_PS_IB;
+>>>> else if (((id_priv->id.ps == RDMA_PS_IB) || (id_priv->id.ps == RDMA_PS_TCP)) && (sid == (RDMA_IB_IP_PS_TCP & mask))) sid_ps = RDMA_IB_IP_PS_TCP; ps = RDMA_PS_TCP;
+>>>> else if (((id_priv->id.ps == RDMA_PS_IB) || (id_priv->id.ps == RDMA_PS_UDP)) && (sid == (RDMA_IB_IP_PS_UDP & mask))) sid_ps = RDMA_IB_IP_PS_UDP; ps = RDMA_PS_UDP;
+>>>> if (ps) sib->sib_sid = cpu_to_be64(sid_ps | ntohs(cma_port((struct sockaddr *) sib))); sib->sib_sid_mask = cpu_to_be64(RDMA_IB_IP_PS_MASK | be64_to_cpu(sib->sib_sid_mask));
+>>> if (cma_any_port(cma_src_addr(id_priv)))
+>>>  ret = cma_alloc_any_port(ps, id_priv);
+>>> else ret = cma_use_port(ps, id_priv);
+>>>> snum = ntohs(cma_port(cma_src_addr(id_priv)));
+>>>>> switch (addr->sa_family)
+>>>>> case AF_INET: return ((struct sockaddr_in *) addr)->sin_port;
+>>>>> case AF_INET6: return ((struct sockaddr_in6 *) addr)->sin6_port;
+>>>>> case AF_IB:
+>>>>>  sib = (struct sockaddr_ib *) addr;
+>>>>>  return htons((u16) (be64_to_cpu(sib->sib_sid) & be64_to_cpu(sib->sib_sid_mask)));
+>>>> bind_list = cma_ps_find(id_priv->id.route.addr.dev_addr.net, ps, snum);
+>>>>> struct xarray *xa = cma_pernet_xa(net, ps);
+>>>>>> struct cma_pernet *pernet = cma_pernet(net);
+>>>>>> switch (ps)
+>>>>>> case RDMA_PS_TCP: return &pernet->tcp_ps;
+>>>>>> case RDMA_PS_UDP: return &pernet->udp_ps;
+>>>>>> case RDMA_PS_IPOIB: return &pernet->ipoib_ps;
+>>>>>> case RDMA_PS_IB: return &pernet->ib_ps;
+>>>>> return xa_load(xa, snum);
+>> EXPORT_SYMBOL(rdma_bind_addr);
+> ucma_put_ctx(ctx);
+>> if (atomic_dec_and_test(&ctx->ref)) complete(&ctx->comp);
 
 ucma_poll()
 > struct ucma_file *file = filp->private_data;
