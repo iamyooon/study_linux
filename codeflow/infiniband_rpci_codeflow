@@ -136,6 +136,8 @@ ucma_init()
 > device_create_file(ucma_misc.this_device, &dev_attr_abi_version);
 > ucma_ctl_table_hdr = register_net_sysctl(&init_net, "net/rdma_ucm", ucma_ctl_table);
 > ib_register_client(&rdma_cma_client);
+>> assign_client_id(client);
+>> xa_for_each_marked (&devices, index, device, DEVICE_REGISTERED) add_client_context(device, client);
 
 ucam_open()
 > file = kmalloc(sizeof *file, GFP_KERNEL); // struct ucma_file *file
@@ -143,6 +145,12 @@ ucam_open()
 > INIT_LIST_HEAD(&file->event_list); INIT_LIST_HEAD(&file->ctx_list); init_waitqueue_head(&file->poll_wait); mutex_init(&file->mut);
 > filp->private_data = file; file->filp = filp;
 > stream_open(inode, filp);
+
+ucma_poll()
+> struct ucma_file *file = filp->private_data;
+> poll_wait(filp, &file->poll_wait, wait);
+> if (!list_empty(&file->event_list)) mask = EPOLLIN | EPOLLRDNORM;
+> return mask
 
 static ssize_t ucma_write(struct file *filp, const char __user *buf, size_t len, loff_t *pos)
 > struct ucma_file *file = filp->private_data;
@@ -153,100 +161,41 @@ static ssize_t ucma_write(struct file *filp, const char __user *buf, size_t len,
 // ucma_bind when hdr.cmd is [RDMA_USER_CM_CMD_BIND]
 static ssize_t ucma_bind(struct ucma_file *file, const char __user *inbuf, int in_len, int out_len)
 > copy_from_user(&cmd, inbuf, sizeof(cmd))
-> ucma_get_ctx(file, cmd.id);
+> ctx = ucma_get_ctx(file, cmd.id);
 >> ctx = _ucma_find_context(id, file);
 >>> ctx = xa_load(&ctx_table, id);
 > rdma_bind_addr(ctx->cm_id, (struct sockaddr *) &cmd.addr);
 >> id_priv = container_of(id, struct rdma_id_private, id);
 >> cma_check_linklocal(&id->route.addr.dev_addr, addr);
+>>> sin6 = (struct sockaddr_in6 *) addr;
+>>> dev_addr->bound_dev_if = sin6->sin6_scope_id;
 >> memcpy(cma_src_addr(id_priv), addr, rdma_addr_size(addr));
->> daddr = cma_dst_addr(id_priv);
+>> daddr = cma_dst_addr(id_priv); daddr->sa_family = addr->sa_family;
 >>> (struct sockaddr *) &id_priv->id.route.addr.dst_addr;
 >> daddr->sa_family = addr->sa_family;
 >> cma_get_port(id_priv);
 >>> if (cma_family(id_priv) != AF_IB) ps = cma_select_inet_ps(id_priv);
->>>> switch (id_priv->id.ps)
->>>> case RDMA_PS_TCP:
->>>> case RDMA_PS_UDP:
->>>> case RDMA_PS_IPOIB:
->>>> case RDMA_PS_IB: return id_priv->id.ps;
 >>> else ps = cma_select_ib_ps(id_priv);
->>>> sib = (struct sockaddr_ib *) cma_src_addr(id_priv);
->>>> mask = be64_to_cpu(sib->sib_sid_mask) & RDMA_IB_IP_PS_MASK;
->>>> sid = be64_to_cpu(sib->sib_sid) & mask;
->>>> if ((id_priv->id.ps == RDMA_PS_IB) && (sid == (RDMA_IB_IP_PS_IB & mask)))sid_ps = RDMA_IB_IP_PS_IB; ps = RDMA_PS_IB;
->>>> else if (((id_priv->id.ps == RDMA_PS_IB) || (id_priv->id.ps == RDMA_PS_TCP)) && (sid == (RDMA_IB_IP_PS_TCP & mask))) sid_ps = RDMA_IB_IP_PS_TCP; ps = RDMA_PS_TCP;
->>>> else if (((id_priv->id.ps == RDMA_PS_IB) || (id_priv->id.ps == RDMA_PS_UDP)) && (sid == (RDMA_IB_IP_PS_UDP & mask))) sid_ps = RDMA_IB_IP_PS_UDP; ps = RDMA_PS_UDP;
->>>> if (ps) sib->sib_sid = cpu_to_be64(sid_ps | ntohs(cma_port((struct sockaddr *) sib))); sib->sib_sid_mask = cpu_to_be64(RDMA_IB_IP_PS_MASK | be64_to_cpu(sib->sib_sid_mask));
->>> if (cma_any_port(cma_src_addr(id_priv)))
->>>  ret = cma_alloc_any_port(ps, id_priv);
->>> else ret = cma_use_port(ps, id_priv);
->>>> snum = ntohs(cma_port(cma_src_addr(id_priv)));
->>>>> switch (addr->sa_family)
->>>>> case AF_INET: return ((struct sockaddr_in *) addr)->sin_port;
->>>>> case AF_INET6: return ((struct sockaddr_in6 *) addr)->sin6_port;
->>>>> case AF_IB:
->>>>>  sib = (struct sockaddr_ib *) addr;
->>>>>  return htons((u16) (be64_to_cpu(sib->sib_sid) & be64_to_cpu(sib->sib_sid_mask)));
->>>> bind_list = cma_ps_find(id_priv->id.route.addr.dev_addr.net, ps, snum);
->>>>> struct xarray *xa = cma_pernet_xa(net, ps);
->>>>>> struct cma_pernet *pernet = cma_pernet(net);
->>>>>> switch (ps)
->>>>>> case RDMA_PS_TCP: return &pernet->tcp_ps;
->>>>>> case RDMA_PS_UDP: return &pernet->udp_ps;
->>>>>> case RDMA_PS_IPOIB: return &pernet->ipoib_ps;
+>>> if (cma_any_port(cma_src_addr(id_priv))) >>>  cma_alloc_any_port(ps, id_priv);
+>>> else cma_use_port(ps, id_priv);
 >>>>>> case RDMA_PS_IB: return &pernet->ib_ps;
 >>>>> return xa_load(xa, snum);
->> EXPORT_SYMBOL(rdma_bind_addr);
-> ucma_put_ctx(ctx);
->> if (atomic_dec_and_test(&ctx->ref)) complete(&ctx->comp);
-
-ucma_poll()
-> struct ucma_file *file = filp->private_data;
-> poll_wait(filp, &file->poll_wait, wait);
-> if (!list_empty(&file->event_list)) mask = EPOLLIN | EPOLLRDNORM;
-> return mask
 
 static ssize_t ucma_create_id(struct ucma_file *file, const char __user *inbuf,	int in_len, int out_len)
 > copy_from_user(&cmd, inbuf, sizeof(cmd))
 > ucma_get_qp_type(&cmd, &qp_type);
 >> switch (cmd->ps) {
 >> case RDMA_PS_TCP: *qp_type = IB_QPT_RC;
->> case RDMA_PS_UDP:
->> case RDMA_PS_IPOIB: *qp_type = IB_QPT_UD;
+>> case RDMA_PS_{UDP,IPOIB}: *qp_type = IB_QPT_UD;
 >> case RDMA_PS_IB: *qp_type = cmd->qp_type;
 > ctx = ucma_alloc_ctx(file);
 >> ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
->> INIT_WORK(&ctx->close_work, ucma_close_id);
->> init_completion(&ctx->comp);
->> INIT_LIST_HEAD(&ctx->mc_list);
 >> ctx->file = file;
 >> xa_alloc(&ctx_table, &ctx->id, ctx, xa_limit_32b, GFP_KERNEL)
 >> list_add_tail(&ctx->list, &file->ctx_list);
 > ctx->uid = cmd.uid;
 > cm_id = __rdma_create_id(current->nsproxy->net_ns, ucma_event_handler, ctx, cmd.ps, qp_type, NULL);
->> id_priv = kzalloc(sizeof *id_priv, GFP_KERNEL);
->> rdma_restrack_set_task(&id_priv->res, caller);
->>> if (caller) res->kern_name = caller; return;
->>> if (res->task) put_task_struct(res->task);
->>> get_task_struct(current);
->>> res->task = current;
->> id_priv->res.type = RDMA_RESTRACK_CM_ID;
->> id_priv->state = RDMA_CM_IDLE;
->> id_priv->id.context = context;
->> id_priv->id.event_handler = event_handler;
->> id_priv->id.ps = ps;
->> id_priv->id.qp_type = qp_type;
->> id_priv->tos_set = false;
->> id_priv->timeout_set = false;
->> id_priv->gid_type = IB_GID_TYPE_IB;
->> init_completion(&id_priv->comp);
->> INIT_LIST_HEAD(&id_priv->listen_list);
->> INIT_LIST_HEAD(&id_priv->mc_list);
->> get_random_bytes(&id_priv->seq_num, sizeof id_priv->seq_num);
->> id_priv->id.route.addr.dev_addr.net = get_net(net);
->> id_priv->seq_num &= 0x00ffffff;
->> EXPORT_SYMBOL(__rdma_create_id);
+>> kzalloc and setting id_priv
 > resp.id = ctx->id;
 > copy_to_user(u64_to_user_ptr(cmd.response), &resp, sizeof(resp))
 > ctx->cm_id = cm_id;
@@ -263,34 +212,14 @@ static ssize_t ucma_query(struct ucma_file *file, const char __user *inbuf, int 
 
 static ssize_t ucma_destroy_id(struct ucma_file *file, const char __user *inbuf, int in_len, int out_len)
 > copy_from_user(&cmd, inbuf, sizeof(cmd))
-> xa_lock(&ctx_table);
 > ctx = _ucma_find_context(cmd.id, file);
->> ctx = xa_load(&ctx_table, id);
-> xa_unlock(&ctx_table);
 > ctx->destroying = 1;
 > flush_workqueue(ctx->file->close_wq);
-> xa_lock(&ctx_table);
 > if (!ctx->closing) {
->  xa_unlock(&ctx_table);
->  ucma_put_ctx(ctx);
 >  wait_for_completion(&ctx->comp);
+tbd
 >  rdma_destroy_id(ctx->cm_id);}
-> else xa_unlock(&ctx_table);
 > resp.events_reported = ucma_free_ctx(ctx);
->> LIST_HEAD(list);
->> ucma_cleanup_multicast(ctx);
->> list_for_each_entry_safe(uevent, tmp, &ctx->file->event_list, list) {
->>  if (uevent->ctx == ctx)
->>   list_move_tail(&uevent->list, &list);
->> }
->> list_del(&ctx->list);
->> list_for_each_entry_safe(uevent, tmp, &list, list) {
->>  list_del(&uevent->list);
->>  if (uevent->resp.event == RDMA_CM_EVENT_CONNECT_REQUEST) rdma_destroy_id(uevent->cm_id);
->>  kfree(uevent);
->> }
->> events_reported = ctx->events_reported;
->> kfree(ctx);
 > copy_to_user(u64_to_user_ptr(cmd.response), &resp, sizeof(resp))
 
 static ssize_t ucma_resolve_addr(struct ucma_file *file, const char __user *inbuf, int in_len, int out_len)
