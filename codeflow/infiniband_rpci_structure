@@ -1,0 +1,75 @@
+struct ib_mad_send_wr_private {
+	struct ib_mad_list_head mad_list;
+	struct list_head agent_list;
+	struct ib_mad_agent_private *mad_agent_priv;
+	struct ib_mad_send_buf send_buf;
+	u64 header_mapping;
+	u64 payload_mapping;
+	struct ib_ud_wr send_wr;
+	struct ib_sge sg_list[IB_MAD_SEND_REQ_MAX_SG];
+	__be64 tid;
+	unsigned long timeout;
+	int max_retries;
+	int retries_left;
+	int retry;
+	int refcount;
+	enum ib_wc_status status;
+
+	/* RMPP control */
+	struct list_head rmpp_list;
+	struct ib_rmpp_segment *last_ack_seg;
+	struct ib_rmpp_segment *cur_seg;
+	int last_ack;
+	int seg_num;
+	int newwin;
+	int pad;
+};
+
+struct ib_mad_agent_private {
+	struct ib_mad_agent agent;
+	struct ib_mad_reg_req *reg_req;
+	struct ib_mad_qp_info *qp_info;
+
+	spinlock_t lock;
+	struct list_head send_list;
+	struct list_head wait_list;
+	struct list_head done_list;
+	struct delayed_work timed_work;
+	unsigned long timeout;
+	struct list_head local_list;
+	struct work_struct local_work;
+	struct list_head rmpp_list;
+
+	atomic_t refcount;
+	union {
+		struct completion comp;
+		struct rcu_head rcu;
+	};
+};
+
+struct ib_mad_qp_info {
+	struct ib_mad_port_private *port_priv;
+	struct ib_qp *qp;
+	struct ib_mad_queue send_queue;
+	struct ib_mad_queue recv_queue;
+	struct list_head overflow_list;
+	spinlock_t snoop_lock;
+	struct ib_mad_snoop_private **snoop_table;
+	int snoop_table_size;
+	atomic_t snoop_count;
+};
+
+struct ib_mad_queue {
+	spinlock_t lock;
+	struct list_head list;
+	int count;
+	int max_active;
+	struct ib_mad_qp_info *qp_info;
+};
+
+struct ib_mad_list_head {
+	struct list_head list;
+	struct ib_cqe cqe;
+	struct ib_mad_queue *mad_queue;
+};
+

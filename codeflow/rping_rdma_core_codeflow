@@ -247,10 +247,25 @@ rping_run_client(struct rping_cb *cb)
 ->->->-> TBD.
 ->->-> if (!ret) cb->qp = id->qp;
 -> rping_setup_buffers(cb);
-->-> cb->recv_mr = ibv_reg_mr(cb->pd, &cb->recv_buf, sizeof cb->recv_buf, IBV_ACCESS_LOCAL_WRITE); //rxe_reg_mr()
-	bool odp_mr = access & IBV_ACCESS_ON_DEMAND;
-	mr = get_ops(pd->context)->reg_mr(pd, addr, length, (uintptr_t) addr, access);
-		mr->context = pd->context; mr->pd      = pd; mr->addr    = addr; mr->length  = length;
+>> cb->recv_mr = ibv_reg_mr(cb->pd, &cb->recv_buf, sizeof cb->recv_buf, IBV_ACCESS_LOCAL_WRITE); //rxe_reg_mr()
+>>> __ibv_reg_mr(pd, addr, length, access, __builtin_constant_p(((access) & IBV_ACCESS_OPTIONAL_RANGE) == 0))
+>>>> if (is_access_const && (access & IBV_ACCESS_OPTIONAL_RANGE) == 0) return ibv_reg_mr(pd, addr, length, access);
+>>>>> mr = get_ops(pd->context)->reg_mr(pd, addr, length, (uintptr_t) addr, access); // rxe_reg_mr()
+>>>>>> vmr = malloc(sizeof(*vmr));
+>>>>>> ibv_cmd_reg_mr(pd, addr, length, hca_va, access, vmr, &cmd, sizeof(cmd), &resp, sizeof(resp));
+>>>>>>> set cmd's start,length,hca_va, pd_handle, access_flags as addr, length, hca_va, pd->handle, access
+>>>>>>> execute_cmd_write(pd->context, IB_USER_VERBS_CMD_REG_MR, cmd, cmd_size, resp, resp_size);
+>>>>>>>> cmd->core_payload.response = ioctl_ptr_to_u64(resp);
+>>>>>>>> _execute_cmd_write()
+>>>>>>>>> set req's command, in_words, out_words as  write_method, req_size, resp_size
+>>>>>>>>> write(ctx->cmd_fd, req, req_size)
+>>>>>>> set vmr->ibv_mr's handle, lkey, rkey, context as resp's mr_handle, lkey, rkey
+>>>>>>> set vmr mr_type, access as IBV_MR_TYPE_MR, access
+>>>>>> return &vmr->ibv_mr;
+>>>>> if (mr) set mr's context, pd, addr, length as pd->context, pd, addr, length
+>>>> else return ibv_reg_mr_iova2(pd, addr, length, (uintptr_t)addr, access);
+>>>>> mr = get_ops(pd->context)->reg_mr(pd, addr, length, (uintptr_t) addr, access);
+>>>>> mr->context = pd->context; mr->pd      = pd; mr->addr    = addr; mr->length  = length;
 ->-> cb->send_mr = ibv_reg_mr(cb->pd, &cb->send_buf, sizeof cb->send_buf, 0);
 ->-> cb->rdma_buf = malloc(cb->size);
 ->-> if(!cb->server) cb->rdma_mr = ibv_reg_mr(cb->pd, cb->rdma_buf, cb->size, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE);
