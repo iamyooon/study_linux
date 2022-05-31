@@ -1,0 +1,33 @@
+PCI TEST ENDPOINT FUNCTION
+
+name: Should be "pci_epf_test" to bind to the pci_epf_test driver.
+name: pci_epf_test 드라이버에 바인딩하려면 "pci_epf_test"여야 합니다.
+
+Configurable Fields:
+구성 가능한 필드:
+vendorid	 : should be 0x104c
+vendor id : 0x104c여야 합니다.
+deviceid	 : should be 0xb500 for DRA74x and 0xb501 for DRA72x
+device id : DRA74x의 경우 0xb500, DRA72x의 경우 0xb501이어야 합니다.
+revid		 : don't care
+revid: 상관 없음
+progif_code	 : don't care
+progif_code: 상관 없음
+subclass_code	 : don't care
+subclass_code: 상관 없음
+baseclass_code	 : should be 0xff
+baseclass_code : 0xff여야 합니다.
+cache_line_size	 : don't care
+cache_line_size : 상관 없음
+subsys_vendor_id : don't care
+subsys_discount_id : 상관 없음
+subsys_id	 : don't care
+subsys_id : 상관 없음
+interrupt_pin	 : Should be 1 - INTA, 2 - INTB, 3 - INTC, 4 -INTD
+interrupt_pin : 1 - INTA, 2 - INTB, 3 - INTC, 4 - INTD여야 합니다.
+msi_interrupts	 : Should be 1 to 32 depending on the number of MSI interrupts
+		   to test
+msi_interrupts : 테스트할 MSI 인터럽트 수에 따라 1에서 32 사이여야 합니다.
+msix_interrupts	 : Should be 1 to 2048 depending on the number of MSI-X
+		   interrupts to test
+msix_interrupts : 테스트할 MSI-X 인터럽트 수에 따라 1에서 2048 사이여야 합니다.
