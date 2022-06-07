@@ -1,0 +1,119 @@
+main
+-> server_opts(argc, argv);
+-> server_run()
+-> client_opts(argc, argv);
+->-> src_file = argv[1];
+->-> dst_addr = argv[2];
+->-> dst_file = strchr(dst_addr, ':');
+-> client_run()
+->-> client_connect();
+->->-> getaddrinfo(dst_addr, port, NULL, &res);
+->->-> rs = rs_socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+->->->-> return fd = rsocket(f, t, p);
+->->-> rconnect(rs, res->ai_addr, res->ai_addrlen);
+->-> client_open(rs);
+->->-> fd = open(src_file, O_RDONLY);
+->->-> fstat(fd, &stats);
+->->-> bytes = (uint64_t) stats.st_size;
+->->-> file_addr = mmap(NULL, bytes, PROT_READ, MAP_SHARED, fd, 0);
+->->-> len = (((uint32_t) strlen(dst_file)) + 8) & 0xFFFFFFF8;
+->->-> msg = calloc(1, sizeof(*msg) + len);
+->->-> msg->hdr.command = CMD_OPEN;
+->->-> msg->hdr.len = sizeof(*msg) + len;
+->->-> msg->hdr.data = (uint32_t) stats.st_mode;
+->->-> strcpy(msg->path, dst_file);
+->->-> msg_get_resp(rs, &msg->hdr, CMD_OPEN);
+->->->-> msg_recv_hdr(rs, msg);
+->->->-> return msg->data;
+->-> client_start_write(rs);
+->->-> memset(&msg, 0, sizeof msg);
+->->-> msg.hdr.command = CMD_WRITE;
+->->-> msg.hdr.len = sizeof(msg);
+->->-> msg.size = bytes;
+->->-> rsend(rs, &msg, sizeof msg, 0);
+->-> rsend(rs, file_addr, bytes, 0);
+->-> msg_get_resp(rs, &ack, CMD_WRITE);
+
+
+#######################################
+# rsend()
+#######################################
+ssize_t rsend(int socket, const void *buf, size_t len, int flags)
+-> rs = idm_at(&idm, socket);
+->-> entry = idm->array[idx_array_index(index)];
+->-> return entry[idx_entry_index(index)];
+-> if (rs->type == SOCK_DGRAM) {
+->  dsend(rs, buf, len, flags);
+->-> msg = rs->smsg_free;
+->-> rs->smsg_free = msg->next;
+->-> rs->sqe_avail--;
+->-> memcpy((void *) msg, &rs->conn_dest->qp->hdr, rs->conn_dest->qp->hdr.length);
+->-> memcpy((void *) msg + rs->conn_dest->qp->hdr.length, buf, len);
+->-> sge.addr = (uintptr_t) msg;
+->-> sge.length = rs->conn_dest->qp->hdr.length + len;
+->-> sge.lkey = rs->conn_dest->qp->smr->lkey;
+->-> offset = (uint8_t *) msg - rs->sbuf;
+->-> ds_post_send(rs, &sge, offset);
+->->-> wr.wr_id = rs_send_wr_id(wr_data);
+->->-> wr.next = NULL;
+->->-> wr.sg_list = sge;
+->->-> wr.num_sge = 1;
+->->-> wr.opcode = IBV_WR_SEND;
+->->-> wr.send_flags = (sge->length <= rs->sq_inline) ? IBV_SEND_INLINE : 0;
+->->-> wr.wr.ud.ah = rs->conn_dest->ah;
+->->-> wr.wr.ud.remote_qpn = rs->conn_dest->qpn;
+->->-> wr.wr.ud.remote_qkey = RDMA_UDP_QKEY;
+->->-> rdmx_seterrno(ibv_post_send(rs->conn_dest->qp->cm_id->qp, &wr, &bad));
+->-> memcpy((void *) msg, &rs->conn_dest->qp->hdr, rs->conn_dest->qp->hdr.length);
+-> }
+-> if (rs->state & rs_opening) ret = rs_do_connect(rs);
+-> if (rs->iomap_pending) ret = rs_send_iomaps(rs, flags);
+-> for (; left; left -= xfer_size, buf += xfer_size) {
+->  rs_can_send(rs)
+->  if (olen < left) xfer_size = olen;
+->  else xfer_size = rs->target_sgl[rs->target_sge].length;
+->  if (xfer_size <= rs->sq_inline) {
+->   sge's addr, length, lkey as buf, xfer_size, 0
+->   rs_write_data(rs, &sge, 1, xfer_size, IBV_SEND_INLINE);
+->  } else if (xfer_size <= rs_sbuf_left(rs)) {
+->   memcpy((void *) (uintptr_t) rs->ssgl[0].addr, buf, xfer_size);
+->   rs->ssgl[0].length = xfer_size;
+->   rs_write_data(rs, rs->ssgl, 1, xfer_size, 0);
+->   if (xfer_size < rs_sbuf_left(rs)) rs->ssgl[0].addr += xfer_size;
+->   else rs->ssgl[0].addr = (uintptr_t) rs->sbuf;
+->  } else {
+->   rs->ssgl[0].length = rs_sbuf_left(rs);
+->   memcpy((void *) (uintptr_t) rs->ssgl[0].addr, buf, rs->ssgl[0].length);
+->   rs->ssgl[1].length = xfer_size - rs->ssgl[0].length;
+->   memcpy(rs->sbuf, buf + rs->ssgl[0].length, rs->ssgl[1].length);
+->   rs_write_data(rs, rs->ssgl, 2, xfer_size, 0);
+->->  rs->sseq_no++;
+->->  rs->sqe_avail--;
+->->  if (rs->opts & RS_OPT_MSG_SEND) rs->sqe_avail--;
+->->  rs->sbuf_bytes_avail -= length;
+->->  addr = rs->target_sgl[rs->target_sge].addr;
+->->  rkey = rs->target_sgl[rs->target_sge].key;
+->->  rs->target_sgl[rs->target_sge].addr += length;
+->->  rs->target_sgl[rs->target_sge].length -= length;
+->->  rs_post_write_msg(rs, sgl, nsge, rs_msg_set(RS_OP_DATA, length), flags, addr, rkey);
+->->-> rs_post_write(rs, sgl, nsge, msg, flags, addr, rkey);
+->->->-> wr.wr_id = rs_send_wr_id(wr_data);
+->->->-> wr.next = NULL;
+->->->-> wr.sg_list = sgl;
+->->->-> wr.num_sge = nsge;
+->->->-> wr.opcode = IBV_WR_RDMA_WRITE;
+->->->-> wr.send_flags = flags;
+->->->-> wr.wr.rdma.remote_addr = addr;
+->->->-> wr.wr.rdma.rkey = rkey;
+->->-> if (!ret) {
+->->-> 	wr.wr_id = rs_send_wr_id(rs_msg_set(rs_msg_op(msg), 0)) | RS_WR_ID_FLAG_MSG_SEND;
+->->-> 	sge.addr = (uintptr_t) &msg;
+->->-> 	sge.lkey = 0;
+->->-> 	sge.length = sizeof msg;
+->->-> 	wr.sg_list = &sge;
+->->-> 	wr.num_sge = 1;
+->->-> 	wr.opcode = IBV_WR_SEND;
+->->-> 	wr.send_flags = IBV_SEND_INLINE;
+->->-> }
+->   rs->ssgl[0].addr = (uintptr_t) rs->sbuf + rs->ssgl[1].length;
+->  }
