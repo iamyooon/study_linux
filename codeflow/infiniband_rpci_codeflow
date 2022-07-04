@@ -935,94 +935,144 @@ struct ib_qp *rpci_create_qp(struct ib_pd *ibpd, struct ib_qp_init_attr *init, s
 
 
 int rpci_ep_requester(void *arg)
-	struct rpci_ep_qp *qp = (struct rpci_ep_qp *)arg;
-next_wqe:
-	wqe = req_next_wqe(qp);
-		struct rxe_send_wqe *wqe = queue_head(qp->sq.queue);
-			return q->buf->data + ((q->buf->consumer_index & q->index_mask) << q->log2_elem_size);
-		wqe = addr_from_index(qp->sq.queue, qp->req.wqe_index);
-			return q->buf->data + ((index & q->index_mask) << q->buf->log2_elem_size);
-		wqe->mask = wr_opcode_mask(wqe->wr.opcode, qp);
-	if (wqe->mask & WR_REG_MASK) {
-		if (wqe->wr.opcode == IB_WR_LOCAL_INV) {
-			struct rpci_ep_dev *rpci = to_rdev(qp->ibqp.device);
-			struct rpci_ep_mem *rmr;
-			rmr = rpci_ep_pool_get_index(&rpci->mr_pool, wqe->wr.ex.invalidate_rkey >> 8);
-			rmr->state = RPCI_MEM_STATE_FREE;
-			wqe->state = wqe_state_done;
-			wqe->status = IB_WC_SUCCESS;
-		} else if (wqe->wr.opcode == IB_WR_REG_MR) {
-			struct rpci_ep_mem *rmr = to_rmr(wqe->wr.wr.reg.mr);
-			rmr->state = RPCI_MEM_STATE_VALID;
-			rmr->access = wqe->wr.wr.reg.access;
-			rmr->lkey = wqe->wr.wr.reg.key;
-			rmr->rkey = wqe->wr.wr.reg.key;
-			rmr->iova = wqe->wr.wr.reg.mr->iova;
-			wqe->state = wqe_state_done;
-			wqe->status = IB_WC_SUCCESS;
-		}
-		if ((wqe->wr.send_flags & IB_SEND_SIGNALED) || qp->sq_sig_type == IB_SIGNAL_ALL_WR)
-			rpci_ep_run_task(&qp->comp.task, 1);
-	}
-	opcode = next_opcode(qp, wqe, wqe->wr.opcode);
-	mask = rpci_ep_opcode[opcode].mask;
-	mtu = get_mtu(qp);
-	payload = (mask & RPCI_WRITE_OR_SEND) ? wqe->dma.resid : 0;
-	skb = init_req_packet(qp, wqe, opcode, payload, &pkt);
-	fill_packet(qp, wqe, &pkt, skb, payload)
-		struct rpci_ep_dev *rpci = to_rdev(qp->ibqp.device);
-		rpci_ep_prepare(pkt, skb, &crc);
-		if (pkt->mask & RPCI_WRITE_OR_SEND) {
-			if (wqe->wr.send_flags & IB_SEND_INLINE) {
-				u8 *tmp = &wqe->dma.inline_data[wqe->dma.sge_offset];
-				crc = rpci_crc32(rpci, crc, tmp, paylen);
-				memcpy(payload_addr(pkt), tmp, paylen);
-				wqe->dma.resid -= paylen;
-				wqe->dma.sge_offset += paylen;
-			} else {
-				err = ep_copy_data(qp->pd, 0, &wqe->dma, payload_addr(pkt), paylen, from_mem_obj, &crc);
-					struct rxe_sge		*sge	= &dma->sge[dma->cur_sge];
-					int			offset	= dma->sge_offset;
-					if (sge->length && (offset < sge->length))
-						mem = ep_lookup_mem(pd, access, sge->lkey, lookup_local);
-					while (length > 0) {
-						bytes = length;
-						if (offset >= sge->length) {
-							sge++;
-							dma->cur_sge++;
-							offset = 0;
-							if (sge->length) {
-								mem = ep_lookup_mem(pd, access, sge->lkey, lookup_local);
-							} else {
-								continue;
-							}
-						}
-						if (bytes > sge->length - offset) bytes = sge->length - offset;
-						if (bytes > 0) {
-							iova = sge->addr + offset;
-							err = rpci_ep_mem_copy(mem, iova, addr, bytes, dir, crcp);
-								if (mem->type == RPCI_MEM_TYPE_DMA) {
-									u8 *src, *dest;
-									src  = (dir == to_mem_obj) ?  addr : ((void *)(uintptr_t)iova);
-									dest = (dir == to_mem_obj) ?  ((void *)(uintptr_t)iova) : addr;
-									memcpy(dest, src, length);
-							offset	+= bytes;
-							resid	-= bytes;
-							length	-= bytes;
-							addr	+= bytes;
-						}
-					}
-					dma->sge_offset = offset;
-					dma->resid	= resid;
-			}
-		}
-		p = payload_addr(pkt) + paylen + bth_pad(pkt);
-		*p = ~crc;
-	save_state(wqe, qp, &rollback_wqe, &rollback_psn);
-	update_wqe_state(qp, wqe, &pkt);
-	update_wqe_psn(qp, wqe, &pkt, payload);
-	rpci_ep_xmit_packet(qp, &pkt, skb);
-	update_state(qp, wqe, &pkt, payload);
+> struct rpci_ep_qp *qp = (struct rpci_ep_qp *)arg;
+> next_wqe:
+> wqe = req_next_wqe(qp);
+>> struct rxe_send_wqe *wqe = queue_head(qp->sq.queue);
+>>> return q->buf->data + ((q->buf->consumer_index & q->index_mask) << q->log2_elem_size);
+>> wqe = addr_from_index(qp->sq.queue, qp->req.wqe_index);
+>>> return q->buf->data + ((index & q->index_mask) << q->buf->log2_elem_size);
+>> mask = wr_opcode_mask(wqe->wr.opcode, qp);
+> if (wqe->mask & WR_REG_MASK) {
+>  if (wqe->wr.opcode == IB_WR_LOCAL_INV) {
+>   struct rpci_ep_dev *rpci = to_rdev(qp->ibqp.device);
+>   struct rpci_ep_mem *rmr;
+>   rmr = rpci_ep_pool_get_index(&rpci->mr_pool, wqe->wr.ex.invalidate_rkey >> 8);
+>   rmr->state = RPCI_MEM_STATE_FREE;
+>   wqe->state = wqe_state_done;
+>   wqe->status = IB_WC_SUCCESS;
+>  } else if (wqe->wr.opcode == IB_WR_REG_MR) {
+>   struct rpci_ep_mem *rmr = to_rmr(wqe->wr.wr.reg.mr);
+>   rmr->state = RPCI_MEM_STATE_VALID;
+>   rmr->access = wqe->wr.wr.reg.access;
+>   rmr->lkey = wqe->wr.wr.reg.key;
+>   rmr->rkey = wqe->wr.wr.reg.key;
+>   rmr->iova = wqe->wr.wr.reg.mr->iova;
+>   wqe->state = wqe_state_done;
+>   wqe->status = IB_WC_SUCCESS;
+>  }
+>  if ((wqe->wr.send_flags & IB_SEND_SIGNALED) || qp->sq_sig_type == IB_SIGNAL_ALL_WR)
+>   rpci_ep_run_task(&qp->comp.task, 1);
+> }
+> opcode = next_opcode(qp, wqe, wqe->wr.opcode);
+> mask = rpci_ep_opcode[opcode].mask;
+> mtu = get_mtu(qp);
+> payload = (mask & RPCI_WRITE_OR_SEND) ? wqe->dma.resid : 0;
+> skb = init_req_packet(qp, wqe, opcode, payload, &pkt);
+> fill_packet(qp, wqe, &pkt, skb, payload)
+>> struct rpci_ep_dev *rpci = to_rdev(qp->ibqp.device);
+>> rpci_ep_prepare(pkt, skb, &crc);
+>> if (pkt->mask & RPCI_WRITE_OR_SEND) {
+>>  if (wqe->wr.send_flags & IB_SEND_INLINE) {
+>>   u8 *tmp = &wqe->dma.inline_data[wqe->dma.sge_offset];
+>>   crc = rpci_crc32(rpci, crc, tmp, paylen);
+>>   memcpy(payload_addr(pkt), tmp, paylen);
+>>   wqe->dma.resid -= paylen;
+>>   wqe->dma.sge_offset += paylen;
+>>  } else {
+>>   err = ep_copy_data(qp->pd, 0, &wqe->dma, payload_addr(pkt), paylen, from_mem_obj, &crc);
+>>>   struct rxe_sge *sge	= &dma->sge[dma->cur_sge];
+>>>   int offset	= dma->sge_offset;
+>>>   if (sge->length && (offset < sge->length))
+>>> 	mem = ep_lookup_mem(pd, access, sge->lkey, lookup_local);
+>>>   while (length > 0) {
+>>>     bytes = length;
+>>> 	if (offset >= sge->length) {
+>>> 	 sge++;
+>>> 	 dma->cur_sge++;
+>>> 	 offset = 0;
+>>> 	 if (sge->length) {
+>>> 	  mem = ep_lookup_mem(pd, access, sge->lkey, lookup_local);
+>>> 	 } else {
+>>>       continue;
+>>> 	 }
+>>>     }
+>>> 	if (bytes > sge->length - offset) bytes = sge->length - offset;
+>>> 	if (bytes > 0) {
+>>> 	 iova = sge->addr + offset;
+>>> 	  err = rpci_ep_mem_copy(mem, iova, addr, bytes, dir, crcp);
+>>>>       if (mem->type == RPCI_MEM_TYPE_DMA) {
+>>>>        u8 *src, *dest;
+>>>>        src  = (dir == to_mem_obj) ?  addr : ((void *)(uintptr_t)iova);
+>>>>        dest = (dir == to_mem_obj) ?  ((void *)(uintptr_t)iova) : addr;
+>>>>        memcpy(dest, src, length);
+>>>>       }
+>>>>        lookup_iova(mem, iova, &m, &i, &offset);
+>>>>        map	= mem->map + m;
+>>>>        buf	= map[0]->buf + i;
+>>>>        while (length > 0) {
+>>>>         u8 *src, *dest;
+>>>>         va	= (u8 *)(uintptr_t)buf->addr + offset;
+>>>>         src  = (dir == to_mem_obj) ? addr : va;
+>>>>         dest = (dir == to_mem_obj) ? va : addr;
+>>>>         bytes	= buf->size - offset;
+>>>>         if (bytes > length)
+>>>>         	bytes = length;
+>>>>         memcpy(dest, src, bytes);
+>>>>         length	-= bytes;
+>>>>         addr	+= bytes;
+>>>>         offset	= 0;
+>>>>         buf++;
+>>>>         i++;
+>>>>         if (i == RPCI_BUF_PER_MAP) {
+>>>>          i = 0;
+>>>>          map++;
+>>>>          buf = map[0]->buf;
+>>>>         }
+>>>>        }
+>>>        offset += bytes;
+>>>        resid -= bytes;
+>>>        length -= bytes;
+>>>        addr	+= bytes;
+>>> 	}
+>>> }
+>>> dma->sge_offset = offset;
+>>> dma->resid	= resid;
+>> 	}
+>> }
+>> p = payload_addr(pkt) + paylen + bth_pad(pkt);
+>> *p = ~crc;
+> save_state(wqe, qp, &rollback_wqe, &rollback_psn);
+> update_wqe_state(qp, wqe, &pkt);
+> update_wqe_psn(qp, wqe, &pkt, payload);
+> rpci_ep_xmit_packet(qp, &pkt, skb);
+>> int is_request		= pkt->mask & RPCI_REQ_MASK;
+>> struct rpci_ep_dev *rpci	= to_rdev(qp->ibqp.device);
+>> if (pkt->mask & RPCI_LOOPBACK_MASK) {
+>>  memcpy(SKB_TO_PKT(skb), pkt, sizeof(*pkt));
+>>  rpci_ep_loopback(skb);
+>>  err = 0;
+>> } else {
+>>  err = rpci_ep_send(pkt, skb);
+>>>  struct rpci_ep_dev* rdev = pkt->rpci;
+>>>  struct rpci_cr* cr = rdev->cr;
+>>>  cr_dbs = rpci_ep_cr_get_db(cr, 0);
+>>>  next = ioread32(&cr_dbs->rq_tdbl) == (rdev->q_size - 1) ? 0 : ioread32(&cr_dbs->rq_tdbl) + 1;
+>>>  hdbl = ioread32(&cr_dbs->rq_hdbl);
+>>>  if (next > hdbl) diff = next - hdbl;
+>>>  else diff = rdev->q_size - hdbl + next;
+>>>  offset = rdev->q_entry_size * ioread32(&cr_dbs->rq_tdbl);
+>>>  header = rdev->mapped_qps[0].rq_ba + offset;
+>>>  if (use_dma) rpci_ep_cr_fill_queue_entry_dma(header, rdev->phys_qps[0].rq_ba + offset, skb);
+>>>>  set lheader's len, data_len, tail, mac_len, hdr_len, transport_header, network_header, mac_header, protocol, data_offset as skb's data_len, tail, mac_len, hdr_len, transport_header, network_header, mac_header, protocol, data - head
+>>>>  memcpy_toio(header, &lheader, sizeof lheader);
+>>>>  base = header_dma + RPCI_DATA_OFFSET;
+>>>>  renesas_pcie_dma_to_remote_memory(base, skb->head, skb->len + lheader.data_offset);
+>>>  else rpci_ep_cr_fill_queue_entry(header, skb);
+>>>  iowrite32(next, &cr_dbs->rq_tdbl);
+>> }
+>> rpci_ep_counter_inc(rpci, RPCI_CNT_SENT_PKTS);
+> update_state(qp, wqe, &pkt, payload);
 
 
 /* implements a simple circular buffer that can optionally be
@@ -1261,6 +1311,17 @@ int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 >>>> sg = umem->sg_head.sgl;
 >>>> while (npages)
 >>>> 	ret = get_user_pages(cur_base, min_t(ulong, npages, PAGE_SIZE/szof(struct page *)),, page_list, NULL);
+>>>>> __gup_longterm_locked(current, current->mm, start, nr_pages, pages, vmas, gup_flags | FOLL_TOUCH);
+>>>>>> __get_user_pages_locked(tsk, mm, start, nr_pages, pages, vmas, NULL, flags);
+>>>>>>> __get_user_pages(tsk, mm, start, nr_pages, flags, pages, vmas, locked);
+>>>>>>>> get_gate_page(mm, start & PAGE_MASK, gup_flags, &vma, pages ? &pages[i] : NULL);
+>>>>>>>>> pgd = pgd_offset_gate(mm, address);
+>>>>>>>>> p4d = p4d_offset(pgd, address);
+>>>>>>>>> pud = pud_offset(p4d, address);
+>>>>>>>>> pmd = pmd_offset(pud, address);
+>>>>>>>>> pte = pte_offset_map(pmd, address);
+>>>>>>>>> *vma = get_gate_vma(mm);
+>>>>>>>>> *page = vm_normal_page(*vma, address, *pte);
 >>>> 	cur_base += ret * PAGE_SIZE; npages -= ret;
 >>>> 	sg = ib_umem_add_sg_table(sg, page_list, ret, dma_get_max_seg_size(context->device->dma_device)
 >>>> 				  , &umem->sg_nents); //Add N contiguous pages to scatter table
