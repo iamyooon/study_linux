@@ -1303,3 +1303,46 @@ int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 >> uobj->uapi_object->type_class->alloc_commit(uobj);
 >> list_add(&uobj->list, &ufile->uobjects);
 >> atomic_set(&uobj->usecnt, 0);
+
+
+
+##################################
+# receiving packet codeflow
+##################################
+
+rpci_ep_probe()
+> INIT_DELAYED_WORK(&rdev->cmd_handler, rpci_ep_cmd_handler);
+
+rpci_ep_bind()
+> queue_work(rdev->wq, &rdev->cmd_handler.work);
+
+rpci_ep_cmd_handler()
+> cr_dbs = rpci_ep_cr_get_db(cr, 0);
+> while(ioread32(&cr_dbs->sq_tdbl) != ioread32(&cr_dbs->sq_hdbl))
+	rpci_ep_receive_packet(rdev);
+>> get db & check packet is arrived
+>> get next index, offset, packet header
+>> read packet data into skb two times
+>> set packet'mask as RPCI_GRH_MASK
+>> rpci_ep_rcv(skb)
+>>> pkt's offset, opcode, psn, qp, mask as 0, bth_opcode(pkt), bth_psn(pkt), NULL, rpci_ep_opcde[pkt->opcode].mask
+>>> rpci_ep_rcv_pkt(pkt, skb);
+>>>> pkt->mask has RPCI_REQ_MASK ->  rpci_ep_resp_queue_pkt(pkt->qp, skb);
+>>>>> add skb to qp->req_pkts as tail
+>>>>> must_sched = 1, if qp->req_pkts is > 1 or pkt->opcode is IB_OPCODE_RC_RDMA_READ_REQUEST
+      must_sched = 0, if qp->req_pkts is <= 1 and pkt->opcode is !IB_OPCODE_RC_RDMA_READ_REQUEST
+>>>>> rpci_ep_responder() as tasklet context or current context
+>>>>>> state = RESPST_RESET, if qp->resp.state == QP_STATE_RESET
+>>>>>>> skb = skb_peek(&qp->req_pkts);
+>>>>>>> return RESPST_READ_REPLY, if qp->resp.res
+>>>>>>> return RESPST_CHK_PSN, if !qp->resp.res
+>>>>>>> return RESPST_EXIT, if !skb
+>>>>>>> return RESPST_CHK_RESOURCE, if qp->resp.state == QP_STATE_ERROR
+>>>>>> read_reply()
+>>>>>>> set opcode, qp->resp.res
+>>>>>>> prepare_ack_packet()
+>>>>>>> rpci_ep_mem_copy(res->read.mr, res->read.va, payload_addr(&ack_pkt)...)
+>>>>>>> rpci_ep_xmit_packet(qp, &ack_pkt)
+>>>>>>> res
+>>>> else -> rpci_ep_comp_queue_pkt(pkt->qp, skb);
+>> set cr_dbs->sq_hdb1 as next index
