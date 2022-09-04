@@ -935,14 +935,14 @@ struct ib_qp *rpci_create_qp(struct ib_pd *ibpd, struct ib_qp_init_attr *init, s
 
 
 int rpci_ep_requester(void *arg)
-	struct rpci_ep_qp *qp = (struct rpci_ep_qp *)arg;
-next_wqe:
-	wqe = req_next_wqe(qp);
-		struct rxe_send_wqe *wqe = queue_head(qp->sq.queue);
-			return q->buf->data + ((q->buf->consumer_index & q->index_mask) << q->log2_elem_size);
-		wqe = addr_from_index(qp->sq.queue, qp->req.wqe_index);
-			return q->buf->data + ((index & q->index_mask) << q->buf->log2_elem_size);
-		wqe->mask = wr_opcode_mask(wqe->wr.opcode, qp);
+> struct rpci_ep_qp *qp = (struct rpci_ep_qp *)arg;
+> next_wqe:
+> wqe = req_next_wqe(qp);
+>> struct rxe_send_wqe *wqe = queue_head(qp->sq.queue);
+>> wqe = addr_from_index(qp->sq.queue, qp->req.wqe_index);
+    return q->buf->data + ((q->buf->consumer_index & q->index_mask) << q->log2_elem_size);
+>> wqe->mask = wr_opcode_mask(wqe->wr.opcode, qp);
+>> return wqe
 	if (wqe->mask & WR_REG_MASK) {
 		if (wqe->wr.opcode == IB_WR_LOCAL_INV) {
 			struct rpci_ep_dev *rpci = to_rdev(qp->ibqp.device);
@@ -969,6 +969,8 @@ next_wqe:
 	mtu = get_mtu(qp);
 	payload = (mask & RPCI_WRITE_OR_SEND) ? wqe->dma.resid : 0;
 	skb = init_req_packet(qp, wqe, opcode, payload, &pkt);
+	> bth_init(pkt, pkt->opcode, solicited, 0, pad, pkey, qp_num, ack_req, pkt->psn);
+	>> set bth's opcode, flags, pkey, qpn, apsn as @pkt->opcode, @pad, @pkey, @pkt->psn
 	fill_packet(qp, wqe, &pkt, skb, payload)
 		struct rpci_ep_dev *rpci = to_rdev(qp->ibqp.device);
 		rpci_ep_prepare(pkt, skb, &crc);
@@ -1022,7 +1024,13 @@ next_wqe:
 	update_wqe_state(qp, wqe, &pkt);
 	update_wqe_psn(qp, wqe, &pkt, payload);
 	rpci_ep_xmit_packet(qp, &pkt, skb);
-	update_state(qp, wqe, &pkt, payload);
+> update_state(qp, wqe, &pkt, payload);
+>> qp->req.opcode = opcode;
+>> pkt->mask & RPCI_END_MASK
+    qp->req.wqe_index = next_index(qp->sq.queue, qp->req.wqe_index);
+>> qp->need_req_skb = 0;
+>> if (qp->qp_timeout_jiffies && !timer_pending(&qp->retrans_timer))
+    mod_timer(&qp->retrans_timer, jiffies + qp->qp_timeout_jiffies);
 
 
 /* implements a simple circular buffer that can optionally be
@@ -1305,9 +1313,223 @@ int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 >> atomic_set(&uobj->usecnt, 0);
 
 
-
 ##################################
-# receiving packet codeflow
+# receiving packet codeflow - rc
+##################################
+
+rpci_rc_process_recv_task()
+> cur_idx = cr_db->rq_hdb1
+> nxt_idx = hdbl == (rdev->q_size -1) ? 0 : hdbl+1
+> skb = rpci_generate_skb_from_entry(header)
+> header = cr_qp->rq_ba + rdev->q_entry_size * cur_idx
+>> copy to lheader from header(cr_qp->rq_ba + rdev->q_entry_size * cur_idx)
+>> alloc skb and set field using lheader
+>> skb->data = skb->head + lheader.data_offset ??????????
+>> copy to skb->head from base(header + RPCI_DATA_OFFSET)
+> setting pkt's rpci, port_num, hdr, mask, paylen
+> rpci_rcv(skb)
+>> if(rpci_match_dgid(rpci, skb) < 0) goto drop ???????
+>> pkt->offset = 0
+>> pkt->opcode = ((struct rxe_bth *)pkt->hdr+pkt->offset)->opcode
+>> pkt->psn = ((struct rxe_bth *)pkt->hdr+pkt->offset)->apsn
+>> pkt->qp = NULL
+>> pkt->mask |= rpci_opcode[pkt->opcode].mask
+>> hdr_check(pkt)
+>>> ((struct rxe_bth *)pkt->hdr+pkt->offset)->qpn is 0 ? goto err1
+>>> if qpn != IB_MULTICAS_QPN
+>>>> qp = rpci_pool_get_index(&rpci->qp_pool, index);
+>>>> check_type_state(rpci, pkt, qp)
+>>>> check_addr(rpci, pkt, qp)
+>>>> check_keys(rpci, pkt, qpn, qp)
+>>> if qpn == IB_MULTICAS_QPN
+>>>> (pkt->mask & RPCI_GRH_MASK) == 0 ? goto err1
+>>> pkt->qp = qp
+>> rpci_counter_inc(rpci, RPCI_CNT_RCVD_PKTS);
+>> if qpn != IB_MULTICAS_QPN
+>>> rpci_rcv_mcast_pkt(rpci, skb)
+>> if qpn == IB_MULTICAST_QPN
+>>> rpci_rcv_pkt(pkt, skb)
+>>>> if pkt->mask & RPCI_REG_MASK, rpci_resp_queue_pkt()
+>>>>> skb_queue_tail(&qp->req_pkts, skb)
+>>>>> must_sched = (pkt->opcode == IB_OPCODE_RC_RDMA_READ_REQUEST) || (skb_queue_len(&qp->req_pkts) > 1); ??????
+>>>>> rpci_run_task(&qp->resp.task, must_sched), rpci_responder()
+>>>>>> qp->resp.state == QP_STATE_RESET -> state = RESPST_RESET
+>>>>>> qp->resp.state != QP_STATE_RESET -> state = RESPST_GET_REQ
+>>>>>> state == RESPST_GET_REQ -> get_req(qp, &pkt)
+>>>>>>> pkt = skb_peek(&qp->req_pkts)
+>>>>>>> return qp->resp.res ? RESPST_READ_REPLY : RESPST_CHK_PSN
+>>>>>> state == RESPST_CHK_PSN -> check_psn(qp, &pkt)
+>>>>>>> diff = psn_compare(pkt->psn, qp->Resp.psn)
+>>>>>>> qp_type(qp) == IB_QPT_RC && diff == 0, return RESPST_CHK_OP_SEQ
+>>>>>> state == RESPST_CHK_OP_SEQ -> check_op_seq(qp, pkt)
+>>>>>>> qp_type(qp) == IB_QPT_RC
+>>>>>>>> qp->resp.opcode is SEND_{FIRST,MIDDLE}
+>>>>>>>>> pkt->opcode is SEND_*, return RESPST_CHK_OP_VALID
+>>>>>>>> qp->resp.opcode is RDMA_WRITE_{FIRST,MIDDLE}
+>>>>>>>>> pkt->opcode is RDMA_WRITE_*, return RESPST_CHK_OP_VALID
+>>>>>>>> qp->resp.opcode is not SEND_{FIRST,MIDDLE} or RDMA_WRITE_{FIRST,MIDDLE}
+>>>>>>>>> pkt->opcode is not RC_SEND_{MIDDLE,LAST*}, RC_RDMA_WRITE_{MIDDLE,LAST*}
+>>>>>>> qp_type(qp) is not IB_QPT_RC or IB_QPT_UD, return RESPST_CHK_OP_VALID
+>>>>>> state == RESPST_CHK_OP_VALID -> check_op_valid(qp, pkt)
+>>>>>>> qp_type(qp) == IB_QPT_RC
+>>>>>>>> pkt->mask has not unsupported opcode, return RESPST_CHK_RESOURCE;
+>>>>>>> qp_type(qp) == IB_QPT_GSI, return RESPST_CHK_RESOURCE;
+>>>>>> state == RESPST_CHK_RESOURCE -> check_resource(qp, pkt)
+>>>>>>>> qp->resp.state == QP_STATE_ERROR,  return ???
+>>>>>>>> pkt->mask has RPCI_READ_OR_ATOMIC, return ???
+>>>>>>>> pkt->mask has RPCI_RWR_MASK, && qp->resp.wqe ? RESPST_CHK_LENGTH : RESPST_ERR_RNR
+>>>>>>>> return RESPST_CHK_LENGTH
+>>>>>> state == RESPST_CHK_LENGTH, check_length(qp, pkt)
+>>>>>>> return RESPST_CHK_RKEY
+>>>>>> state == RESPST_CHK_RKEY, check_rkey(qp, pkt)
+>>>>>>> set qp->resp's va, rkey, resid, length
+>>>>>>> set access type(read or write)
+>>>>>>> get lookup_mem() using qp->pd, access, rkey, lookup_remote
+         return rpci_pool_get_index(rpci->mr_pool, rkey >> 8)
+>>>>>>> check mem info and set it to qp->resp.mr
+>>>>>>> return RESPST_EXECUTE in below case
+         1) pkt->mask has not READ or WRITE or ATOMIC
+	 2) pkt->mask has READ+WRITE_OR_SEND+RETH && packet length is zero
+>>>>>>> return RESPST_ERR_RKEY_VIOLATION in below case
+         1) not found related mem
+	 2) mem->state == RPCI_MEM_STATE_FREE
+	 3) mem's address range is invalid
+>>>>>>> return RESPST_ERR_LENGTH in below case
+	 1) pkt->mask has WRITE && resid > mtu && (pktlen != mtu || !pad)
+	 2) pkt->mask has WRITE && resid <= mtu && pktlen != resid
+	 3) pkt->mask has WRITE && resid <= mtu && pad != (0x3 & (~resid))
+>>>>>> state == RESPST_EXECUTE, execute(qp, pkt)
+>>>>>>> pkt->mask has RPCI_SEND_MASK
+>>>>>>>> qp_type(qp) is QPT_UD, QPT_SMI, QPT_SGI, err = send_data_in(qp, &hdr,), return err
+>>>>>>>> send_data_in(qp, payload_addr(pkt),), return err
+>>>>>>>>> copy_data(qp->pd, IB_ACCESS_LOCAL_WRITE, &qp->resp.wqe->dma, data_addr, data_len, to_mem_obj, NULL);
+>>>>>>>>>> if sg->length && (offset < sge->length) 
+            mem = lookup_mem(pd, access, sge->lkey, lookup_local)
+>>>>>>>>>> while (length > 0)
+            bytes = length
+            if offset >= sge->length
+             sge++, dma->cur_sge++, offset = 0
+	     if sge->length, mem = lookup_mem(pd, access, sge->lkey, lookup_local)
+            if bytes > (sge->length - offset)
+             bytes = sge->length - offset
+            if bytes > 0
+             iova = sge->addr + offset
+	     rpci_mem_copy(mem, iova, addr, bytes, dir, crcp);
+	     offset += bytes, resid -= bytes, length -= bytes, addr += bytes
+	   dma->sge_offset = offset
+	   dma->resid = resid
+>>>>>>>>>>>
+>>>>>>>>>>>
+>>>>>>>>>>>
+>>>>>>>>>>>
+>>>>>>>>>>>
+>>>>>>>>>>
+>>>>>>> pkt->mask has RPCI_WRITE_MASK, err = write_data_in(qp, pkt), return err
+>>>>>>> pkt->mask has RPCI_READ_MASK, qp->resp.msn++
+>>>>>>> pkt->mask has RPCI_ATOMIC_MASK, err = process_atomic(qp, pkt), return err
+>>>>>>> set qp->resp's psn, ack_psn, opcode, status as pkt->psn+1, qp->resp.psn, pkt->opcode, IB_WC_SUCCESS
+>>>>>>> pkt->mask has RPCI_COMP_MASK, qp->Resp.msn++, return RESPST_COMPLETE
+>>>>>>> pkt->maks has not RPCI_COMP_MAKS, qp_type(qp) is IB_QPT_RC, return RESPST_ACKNOWLEDGE
+>>>>>>> pkt->maks has not RPCI_COMP_MAKS, qp_type(qp) is not IB_QPT_RC, return RESPST_CLEANUP
+>>>>>> state == RESPST_COMPLETE, do_complete(qp, pkt)
+>>>>>>> if qp->req->is_user, ???
+>>>>>>> if !qp->req->is_user, set wc's status,qp,wr_id as qp->resp.status, &qp->ibqp, wqe->wr_id
+>>>>>>> wc->status is IB_WC_SUCCESS, set wc's opcode, vendor_err, byte_len
+>>>>>>>> if qp->rc->is_user, set uwc's wc_flags, ex.imm_data, invalide_rkey, qp_num, src_qp, port_num
+>>>>>>>> if !qp->rc->is_user, set wc's wc_flags, network_hdr_type, vlan_id, ex.imm_data, qp, port_num
+>>>>>>> qp->resp.wqe = NULL;
+>>>>>>> rpci_cq_post(qp->rcq, &cqe, pkt? bth_se(pkt):1)
+>>>>>>>> memcpy(producer_addr(cq->queue), cqe, sizeof(*cqe));
+>>>>>>>> advance_producer(cq->queue);
+>>>>>>>> cq->notify is IB_CQ_{NEXT_COMP,CQ_SLICITED}, cq->notify=0, tasklet_schedule(&cp->comp_task)
+>>>>>>>> return 0;
+>>>>>>> if !pkt, return RESPST_DONE
+>>>>>>> if pkt && qp is IB_QPT_RC, return RESPST_ACKNOWLEDGE
+>>>>>>> if pkt && qp is not IB_QPT_RC, return RESPST_CLEANUP
+>>>>>> state == RESPST_READ_REPLY, read_reply(qp, pkt)
+>>>>>> state == RESPST_ACKNOWLEDGE, acknowledge(qp, pkt)
+>>>>>>> qp is IB_QPT_RC
+>>>>>>>> qp->resp.aeth_syndrome is not AETH_ACK_UNLIMITED, send_ack(qp,pkt, qp->resp.aeth_syndrome, pkt->psn)
+>>>>>>>>> prepare_ack_packet(qp, pkt, &ack_pkt, IB_OPCODE_RC_ACKNOWLEDGE, 0, psn, syndrome, NULL)
+>>>>>>>>>> paylen = rxe_opcode[opcode].length + payload + pad + RXE_ICRC_SIZE
+           sizeof(struct rxe_bth) + sizeof(struct rxe_aeth) + payload + pad + RXE_ICRC_SIZE
+>>>>>>>>>> skb = rxe_init_packet(rxe, &qp->pri_av, paylen, ack)
+>>>>>>>>>> set ack_pkt's qp, opcode, mask, offset, paylen as qp, opcode, rxe_opcode[opcode].mask, pkt->offset, paylen
+>>>>>>>>>> memcpy(ack->hdr, pkt->hdr, pkt->offset + RXE_BTH_BYTES);
+>>>>>>>>>> set ack_pkt->bth's opcode, qpn, pad, se, apsn, ack, psn as opcode, qp->attr.dest_qp_num, pad, 0, psn, 0, psn
+>>>>>>>>>> rxe_prepare(ack, skb, &crc)
+>>>>>>>>>> if crcp, *crcp = crc
+>>>>>>>>>> if not crcp, p = payload_addr(ack) + payload + bth_pad(ack), *p = ~crc
+>>>>>>>>>> return skb
+>>>>>>>>> rpci_xmit_packet(qp, &ack_pkt, skb);
+>>>>>>>>>> rpci_send(pkt, skb);
+>>>>>>>>>> qp is not IB_QPT_RC && pkt->mask is RPCI_END_MASK
+>>>>>>>>>>> pkt->wqe->state = wqe_state_done, rpci_run_task(&qp->comp.task, 1)
+>>>>>>>> qp->resp.aeth_syndrome is AETH_ACK_UNLIMITED && pkt->mask has RPCI_ATOMIC_MASK, send_ack(qp, pkt ,AETH_ACK_UNLIMITED)
+>>>>>>>> qp->resp.aeth_syndrome is AETH_ACK_UNLIMITED && bth_ack(pkt), send_ack(qp, pkt ,AETH_ACK_UNLIMITED, pkt->psn)
+>>>>>>> reutrn RESPST_CLEANUP
+>>>>>> state == RESPST_CLEANUP, cleanup(qp, pkt)
+>>>>>>> pkt, skb = skb_dequeue(), rpci_drop_ref(qp),kfree_skb(skb)
+>>>>>>> qp->resp.mr, rcpi_drop_ref(qp->resp.mr), qp->resp.mr = NULL
+>>>>>>> return RESPST_DONE;
+>>>>>> exit:
+>>>>>>> ret = -EAGAIN
+>>>>>> done:
+>>>>>>> rpci_drop_ref(qp)
+>>>> if !(pkt->mask & RPCI_REG_MASK), rpci_comp_queue_pkt()
+>>>>> skb_queue_tail(&qp->resp_pkts, skb)
+>>>>> must_sched = skb_queue_len(&qp->resp_pkts)>1
+>>>>> rpci_run_task(&qp->comp.task, must_sched), rpci_completer
+>>>>>> ???
+>>>>>> state = COMPST_GET_ACK
+		skb = skb_dequeue(&qp->resp_pkts)
+		pkt = SKB_TO_PKT(skb0
+		qp->comp.timeout_retry = 0;
+		state = COMPST_GET_WQE
+>>>>>> state == COMPST_GET_WQE, get_wqe(qp, pkt, &wqe)
+>>>>>>> wqe = queue_head(qp->sq.queue), *wqe_p = wqe;
+>>>>>>> wqe->state is wqe_state_done, return COMPST_COMP_WQE
+>>>>>>> pkt is true, return COMPST_CHECK_PSN
+>>>>>>> pkt is not true, return COMPST_EXIT
+>>>>>> state == COMPST_CHECK_PSN, check_psn(qp, pkt, &wqe)
+>>>>>>> diff = psn_compare(pkt->psn, wqe->last_psn);
+	return COMPST_COMP_WQE
+         diff > 0 && wqe->state == wqe_state_pending && wqe->mask has not WR_ATOMIC_OR_READ_MASK
+	return COMPST_DONE
+         diff > 0 && wqe->state != wqe_state_pending
+>>>>>>> diff = psn_compare(pkt->psn, qp->comp.psn);
+	return COMPST_COMP_ACK
+	 diff < 0 && pkt->psn == wqe->last_psn
+	return COMPST_DONE
+	 - diff < 0 && pkt->psn != wqe->last_psn
+	 - diff > 0 && wqe->mask has WR_ATOMIC_OR_READ_MASK
+	return COMPST_CHECK_ACK
+	 - diff == 0
+	 - diff > 0 && wqe->mask has not WR_ATOMIC_OR_READ_MASK
+>>>>>> state == COMPST_CHECK_ACK, check_psn(qp, pkt, &wqe)
+>>>>>>> return COMPST_READ
+>>>>>>> return COMPST_ATOMIC
+>>>>>>> return COMPST_WRITE_SEND
+>>>>>>>
+>>>>>>>
+>>>>>> state == COMPST_CHECK_ACK, check_ack(qp, pkt, &wqe)
+>>>>>>> 
+>>>>>>> 
+>>>>>> 
+>>>>>> 
+>>>>>> 
+>>>>>> 
+>>>>>> 
+>>>>>> 
+>>>>>> 
+>>>>>> 
+>>>>>> 
+>>>>>> 
+>>>>>> 
+>>>>>> 
+> cr_db->rq_hdbl = nxt_idx
+##################################
+# receiving packet codeflow - ep
 ##################################
 
 rpci_ep_probe()
