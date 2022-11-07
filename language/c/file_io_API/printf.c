@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+void test_func()
+{
+}
 int main()
 {
 	printf("문자열[%s]\n", "Hello World");
@@ -11,5 +14,8 @@ int main()
 	printf("16진수 대문자[%X]\n", 'H');
 	printf("16진수 소문자[%x]\n", 'i');
 	printf("16진수 2자리만[%02X]\n", 255);
+	printf("test func= %pS\n", test_func);
+	printf("test func= %pF\n", test_func);
+	printf("test func= %fP\n", test_func);
 	return 0;
 }
